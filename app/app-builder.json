@@ -1,0 +1,36 @@
+{
+  "app_name": "P4wnP1 A.L.O.A.",
+  "package_name": "p4wnp1-panel",
+  "version": "0.1.0",
+  "bin_name": "p4wnp1_panel",
+  "description": "P4wnP1 A.L.O.A. on-device panel",
+  "store": {
+    "summary": "Run P4wnP1 A.L.O.A. on the CardputerZero, without reflashing it",
+    "description": "The on-device panel for P4wnP1 A.L.O.A. running on the same CardputerZero. Compose USB gadget personas (keyboard, mouse, raw HID, RNDIS and CDC ECM networking, mass storage), watch the endpoint budget before you deploy rather than after, run HID payloads against an attached host, and see what the device is currently presenting over USB.\n\nIt installs and removes as an ordinary package, so the device does not need a different OS image to become a USB rig. Networking is borrowed while a mode is armed and handed back on disarm, leaving the CardputerZero's own Wi-Fi settings working when the panel is not in use.\n\nThe panel reports what the service reports. It cannot tell you whether an attached host accepted what was typed into it.",
+    "categories": [
+      "Security",
+      "Hardware & IoT"
+    ],
+    "screenshots": [
+      "screenshot/app-simulator-dark-darwin.png",
+      "screenshot/app-simulator-light-darwin.png"
+    ],
+    "icon": "assets/images/p4wnp1_panel.png",
+    "license": "GPL-3.0-only",
+    "source_repo": "https://github.com/at0m-b0mb/p4wnp1-cardputerzero",
+    "author": {
+      "github": "at0m-b0mb",
+      "display_name": "at0m-b0mb"
+    },
+    "share_code": "P4WN",
+    "permissions": {
+      "camera": false,
+      "microphone": false,
+      "imu": false,
+      "network": true,
+      "additional_hardware": true,
+      "background_service": true,
+      "external_display": false
+    }
+  }
+}

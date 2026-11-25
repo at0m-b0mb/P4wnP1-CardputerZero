@@ -1,0 +1,6 @@
+# build output
+app/build/
+app/.cache/
+
+# the simulator writes captures to ~/Pictures/Screenshots; only curated ones
+# belong in the repo, and they live in app/screenshot/
