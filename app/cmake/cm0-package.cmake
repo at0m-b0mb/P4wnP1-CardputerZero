@@ -113,11 +113,17 @@ endif()
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 
 # When shlibdeps can run it is the only list worth having: it reads the ELF,
-# so it names libcurl4t64 and libpng16-16t64 correctly and cannot go stale the
-# next time a library is linked. The hand-written list is kept only as the
-# fallback for builds where dpkg-shlibdeps is not available, and is otherwise
-# left out rather than merged -- merging produced duplicate entries and two
-# package names that do not exist on trixie.
+# so it cannot go stale the next time a library is linked, and it carries
+# minimum versions the hand-written list has no way to know.
+#
+# The hand-written list is kept only as the fallback for builds where
+# dpkg-shlibdeps is not available, and is otherwise left out rather than
+# merged, because merging produced duplicate entries.
+#
+# (An earlier version of this comment claimed the hand-written names did not
+# exist on trixie. They do -- libpng16-16 and friends are transitional
+# packages. shlibdeps simply resolves to the real ones, libpng16-16t64 and
+# libcurl4t64, which is better but was not the bug.)
 if(CPACK_DEBIAN_PACKAGE_SHLIBDEPS)
     set(CPACK_DEBIAN_PACKAGE_DEPENDS "")
 else()
