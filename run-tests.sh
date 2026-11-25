@@ -25,6 +25,10 @@ clang++ -std=c++17 -Wall -Wextra -I"$JSON" \
   src/service/status_parse.cpp tests/test_status_parse.cpp -o "$OUT/parse"
 run "status parsing"  "$OUT/parse"
 
+clang++ -std=c++17 -Wall -Wextra \
+  src/service/freshness.cpp tests/test_freshness.cpp -o "$OUT/freshness"
+run "reading freshness" "$OUT/freshness"
+
 clang++ -std=c++17 -Wall -Wextra -I"$JSON" \
   src/service/status_parse.cpp src/service/rpc_client.cpp tests/test_rpc_integration.cpp \
   -lcurl -o "$OUT/rpc"

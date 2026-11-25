@@ -8,10 +8,11 @@
 
 #include "asset_manager.h"
 #include "bindings.h"
-#include "theme.h"
 #include "rpc_client.h"
+#include "theme.h"
 #include "ui_const.h"
 
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
@@ -19,8 +20,6 @@
 namespace screen {
 namespace {
 
-// Where the service is. Overridable so the panel can be pointed at a stand-in
-// while there is no device, which is also how the screenshots are made.
 std::string api_base() {
     if (const char* v = std::getenv("P4WNP1_API")) {
         return v;
@@ -37,18 +36,6 @@ std::string token_path() {
     return "/run/p4wnp1/local.token";
 }
 
-// Ask the service. Every field it does not answer stays at its "unknown"
-// default and the screen says so, rather than showing a plausible device.
-service::StatusSnapshot current_status() {
-    service::RpcClient client(api_base(), token_path());
-    client.set_timeout_ms(1200);
-    return client.fetch_status();
-}
-
-// Six rows plus a header have to live inside 110px, so the connected view
-// uses a tighter pitch than the default row height.
-constexpr int kConnectedRowPitch = 14;
-
 std::string endpoint_label() {
     std::string base = api_base();
     const std::string scheme = "http://";
@@ -58,6 +45,28 @@ std::string endpoint_label() {
     return base;
 }
 
+std::int64_t now_ms() {
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+}
+
+// Last known reading, kept across screen rebuilds so switching pages does not
+// throw away what we were told.
+service::StatusSnapshot g_snapshot;
+bool g_ever_reached = false;
+bool g_last_attempt_ok = false;
+std::int64_t g_last_ok_ms = 0;
+
+void age_text(char* buf, std::size_t n, int age_ms) {
+    const int s = age_ms / 1000;
+    if (s < 60) {
+        std::snprintf(buf, n, "%ds ago", s);
+    }
+    else {
+        std::snprintf(buf, n, "%dm ago", s / 60);
+    }
+}
+
 } // namespace
 
 StatusScreen::StatusScreen(viewmodel::BaseViewModel& view_model, app::AssetManager& assets)
@@ -65,24 +74,68 @@ StatusScreen::StatusScreen(viewmodel::BaseViewModel& view_model, app::AssetManag
     init();
 }
 
+StatusScreen::~StatusScreen() {
+    // The screen outlives nothing: if the timer did, it would fire against a
+    // destroyed object the next time the page changed.
+    if (poll_timer_) {
+        lv_timer_delete(poll_timer_);
+        poll_timer_ = nullptr;
+    }
+}
+
+void StatusScreen::poll_timer_cb(lv_timer_t* timer) {
+    auto* self = static_cast<StatusScreen*>(lv_timer_get_user_data(timer));
+    if (self) {
+        self->poll();
+    }
+}
+
+void StatusScreen::poll() {
+    service::RpcClient client(api_base(), token_path());
+    client.set_timeout_ms(1200);
+    const service::StatusSnapshot fresh = client.fetch_status();
+
+    // "Answered" means at least one of the five reads came back. A device
+    // whose Wi-Fi subsystem is unavailable still counts as reachable.
+    const bool answered = fresh.usb_ok || fresh.net_ok || fresh.wifi_ok || fresh.jobs_ok;
+    g_last_attempt_ok = answered;
+    if (answered) {
+        g_snapshot = fresh;
+        g_ever_reached = true;
+        g_last_ok_ms = now_ms();
+    }
+    render();
+}
+
 void StatusScreen::build_content(lv_obj_t* content) {
+    content_ = content;
+    poll();
+    poll_timer_ = lv_timer_create(poll_timer_cb, kStatusPollMs, this);
+}
+
+void StatusScreen::render() {
     using namespace view;
 
-    const service::StatusSnapshot status = current_status();
+    if (!content_ || !lv_obj_is_valid(content_)) {
+        return;
+    }
+    lv_obj_clean(content_);
+
     const bool dark = lv_subject_get_int(view_model().dark_mode_subject()) != 0;
     const ThemePalette p = palette(dark);
+    const service::Freshness fresh = service::assess(
+        g_ever_reached, g_last_ok_ms, g_last_attempt_ok, now_ms(), kStatusStaleMs);
 
     auto* f_head  = assets().load_standard_font(metric::kTextTitle, app::StandardFontWeight::Bold);
     auto* f_label = assets().load_standard_font(metric::kTextLabel, app::StandardFontWeight::Regular);
     auto* f_value = assets().load_standard_font(metric::kTextValue, app::StandardFontWeight::Bold);
     auto* f_note  = assets().load_standard_font(metric::kTextNote, app::StandardFontWeight::Regular);
-
     const auto face = [](lv_font_t* f) -> const lv_font_t* {
         return f ? f : &lv_font_montserrat_12;
     };
 
     const auto text_at = [&](const char* s, const lv_font_t* font, lv_color_t colour, int y) {
-        auto* l = lv_label_create(content);
+        auto* l = lv_label_create(content_);
         lv_label_set_text(l, s);
         lv_obj_set_style_text_font(l, font, 0);
         lv_obj_set_style_text_color(l, colour, 0);
@@ -91,7 +144,7 @@ void StatusScreen::build_content(lv_obj_t* content) {
     };
 
     const auto rule_at = [&](int y) {
-        auto* r = lv_obj_create(content);
+        auto* r = lv_obj_create(content_);
         lv_obj_remove_style_all(r);
         lv_obj_set_size(r, kScreenWidth - (metric::kGutter * 2), metric::kHairline);
         lv_obj_set_style_bg_color(r, p.border, 0);
@@ -99,74 +152,81 @@ void StatusScreen::build_content(lv_obj_t* content) {
         lv_obj_align(r, LV_ALIGN_TOP_LEFT, metric::kGutter, y);
     };
 
-    // --- the statement -----------------------------------------------------
-    // The page leads with one fact, set large and in the colour of its own
-    // severity, instead of a row of equally weighted fields.
-    const bool any_answer = status.usb_ok || status.net_ok || status.wifi_ok || status.jobs_ok;
-
-    if (!any_answer) {
-        text_at("No service", face(f_head), p.error, 6);
+    // --- nothing has ever answered ----------------------------------------
+    if (fresh.state == service::Liveness::NeverReached) {
+        text_at(service::headline(fresh.state), face(f_head), p.error, 6);
         text_at("Nothing here is measured.", face(f_note), p.text_secondary, 25);
-
         rule_at(46);
-
-        // What it is waiting for, so the empty state is actionable rather than
-        // just blank. Brass used once, on the one thing worth looking at.
         text_at("Waiting for a P4wnP1 service at", face(f_note), p.text_disabled, 56);
         text_at(endpoint_label().c_str(), face(f_value), p.brass, 72);
         return;
     }
 
-    // Connected, so the statement is implied by there being figures at all.
-    // It shrinks to one line and gives its space to the rows -- six of them do
-    // not fit under a headline and a rule on a 110px content area.
-    text_at("Service up", face(f_note), p.success, 2);
+    // --- there is a reading, fresh or not ---------------------------------
+    const bool live = fresh.state == service::Liveness::Live;
+    const lv_color_t head_colour = live ? p.success
+                                        : (fresh.state == service::Liveness::Lost ? p.error
+                                                                                  : p.warning);
+    text_at(service::headline(fresh.state), face(f_note), head_colour, 2);
+
+    // The age is the whole point: a figure with no timestamp invites the
+    // reader to assume it is current.
+    char stamp[32];
+    if (live) {
+        std::snprintf(stamp, sizeof(stamp), "%s", endpoint_label().c_str());
+    }
+    else {
+        char age[24];
+        age_text(age, sizeof(age), fresh.age_ms);
+        std::snprintf(stamp, sizeof(stamp), "last read %s", age);
+    }
     {
-        auto* where = lv_label_create(content);
-        lv_label_set_text(where, endpoint_label().c_str());
+        auto* where = lv_label_create(content_);
+        lv_label_set_text(where, stamp);
         lv_obj_set_style_text_font(where, face(f_note), 0);
-        lv_obj_set_style_text_color(where, p.text_disabled, 0);
+        lv_obj_set_style_text_color(where, live ? p.text_disabled : head_colour, 0);
         lv_obj_align(where, LV_ALIGN_TOP_RIGHT, -metric::kGutter, 2);
     }
     rule_at(16);
 
-    // --- the facts ---------------------------------------------------------
+    // When the reading is not current, every figure under it is last-known.
+    // Dimming them is the difference between reporting and asserting.
+    const lv_color_t value_colour = live ? p.text : p.text_disabled;
+    const lv_color_t dim_colour = p.text_disabled;
+
     int y = 22;
-    const auto row = [&](const char* name, const char* value, lv_color_t colour) {
-        auto* k = lv_label_create(content);
+    const auto row = [&](const char* name, const char* value, bool emphasised) {
+        auto* k = lv_label_create(content_);
         lv_label_set_text(k, name);
         lv_obj_set_style_text_font(k, face(f_label), 0);
         lv_obj_set_style_text_color(k, p.text_secondary, 0);
         lv_obj_align(k, LV_ALIGN_TOP_LEFT, metric::kGutter, y);
 
-        auto* v = lv_label_create(content);
+        auto* v = lv_label_create(content_);
         lv_label_set_text(v, value);
         lv_obj_set_style_text_font(v, face(f_value), 0);
-        lv_obj_set_style_text_color(v, colour, 0);
+        lv_obj_set_style_text_color(v, emphasised ? value_colour : dim_colour, 0);
         lv_obj_align(v, LV_ALIGN_TOP_LEFT, metric::kGutter + 84, y);
-        y += kConnectedRowPitch;
+        y += 14;
     };
 
     char buf[64];
-    const std::string usb = service::usb_summary(status);
-    const std::string usbeth = service::interface_ip(status, "usbeth");
-    const std::string wlan = service::interface_ip(status, "wlan0");
+    const std::string usb = service::usb_summary(g_snapshot);
+    const std::string usbeth = service::interface_ip(g_snapshot, "usbeth");
+    const std::string wlan = service::interface_ip(g_snapshot, "wlan0");
 
-    row("USB", status.usb_ok ? usb.c_str() : "unknown",
-        status.usb_composed ? p.text : p.text_disabled);
-    row("usbeth", usbeth.empty() ? "none" : usbeth.c_str(),
-        usbeth.empty() ? p.text_disabled : p.text);
-    row("wlan0", wlan.empty() ? "none" : wlan.c_str(),
-        wlan.empty() ? p.text_disabled : p.text);
-    row("Wi-Fi", status.wifi_ok ? status.wifi.c_str() : "unavailable",
-        status.wifi_ok ? p.text : p.text_disabled);
+    row("USB", g_snapshot.usb_ok ? usb.c_str() : "unknown", g_snapshot.usb_composed);
+    row("usbeth", usbeth.empty() ? "none" : usbeth.c_str(), !usbeth.empty());
+    row("wlan0", wlan.empty() ? "none" : wlan.c_str(), !wlan.empty());
+    row("Wi-Fi", g_snapshot.wifi_ok ? g_snapshot.wifi.c_str() : "unavailable", g_snapshot.wifi_ok);
 
-    if (status.reflexes_ok) {
-        std::snprintf(buf, sizeof(buf), "%d of %d armed", status.reflexes_armed, status.reflexes);
-        row("Reflexes", buf, status.reflexes_armed > 0 ? p.text : p.text_disabled);
+    if (g_snapshot.reflexes_ok) {
+        std::snprintf(buf, sizeof(buf), "%d of %d armed",
+                      g_snapshot.reflexes_armed, g_snapshot.reflexes);
+        row("Reflexes", buf, g_snapshot.reflexes_armed > 0);
     }
-    std::snprintf(buf, sizeof(buf), "%d running", status.jobs_running);
-    row("Jobs", buf, status.jobs_running > 0 ? p.text : p.text_disabled);
+    std::snprintf(buf, sizeof(buf), "%d running", g_snapshot.jobs_running);
+    row("Jobs", buf, g_snapshot.jobs_running > 0);
 }
 
 } // namespace screen

@@ -9,7 +9,7 @@
   <a href="LICENSE"><img alt="Licence" src="https://img.shields.io/badge/licence-GPL--3.0--only-8A6A1F"></a>
   <img alt="Target" src="https://img.shields.io/badge/target-CardputerZero%20%C2%B7%20aarch64-1A1713">
   <img alt="Package" src="https://img.shields.io/badge/package-p4wnp1--panel.deb-1A1713">
-  <img alt="Tests" src="https://img.shields.io/badge/host%20suites-5%20passing-2E6F4E">
+  <img alt="Tests" src="https://img.shields.io/badge/host%20suites-6%20passing-2E6F4E">
   <img alt="Hardware" src="https://img.shields.io/badge/on%20hardware-not%20yet%20verified-9B2C2C">
 </p>
 
@@ -72,6 +72,12 @@ accepted what was typed into it**, and it does not pretend to.
   plugged in. Both are named before they happen, not after.
 - A service that is down and a service that refuses are distinguished, because they call for
   different actions.
+- **Status re-reads every five seconds, and says so.** The moment a read fails the headline stops
+  saying *Service up*, the figures under it dim to mark them as last-known, and the corner reports
+  how old they are. A panel left on a desk should not keep asserting something it checked once.
+  Four states are distinguished and tested separately: never reached, live, *not refreshing* (the
+  poll itself is wedged) and *lost the service* — the last two look alike and call for opposite
+  actions.
 
 ## Not yet verified on hardware
 
@@ -91,7 +97,7 @@ what cannot.
 ## Building
 
 ```bash
-./run-tests.sh      # five host suites, none needing hardware
+./run-tests.sh      # six host suites, none needing hardware
 ./build-deb.sh      # the arm64 .deb, built natively in a Debian container
 ./test-install.sh   # install it, inspect it, remove it, purge it
 ```
@@ -102,6 +108,7 @@ what cannot.
 | `test_gadget_budget` | the endpoint arithmetic and cursor behaviour |
 | `test_network_custody` | that NetworkManager is always handed back |
 | `test_status_parse` | the service's reply shapes |
+| `test_freshness` | that a reading is never shown as current once it stops being so |
 | `test_rpc_integration` | the real client over a real socket, against `fake_service.py` |
 
 The simulator runs on macOS and Linux:
