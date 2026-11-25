@@ -12,12 +12,13 @@
       "Hardware & IoT"
     ],
     "screenshots": [
-      "screenshot/app-simulator-dark-darwin.png",
-      "screenshot/app-simulator-light-darwin.png"
+      "screenshot/status-live-dark.png",
+      "screenshot/cable-dark.png",
+      "screenshot/payloads-dark.png"
     ],
-    "icon": "assets/images/p4wnp1_panel.png",
+    "icon": "assets/images/store-icon.png",
     "license": "GPL-3.0-only",
-    "source_repo": "https://github.com/at0m-b0mb/p4wnp1-cardputerzero",
+    "source_repo": "https://github.com/at0m-b0mb/P4wnP1-CardputerZero",
     "author": {
       "github": "at0m-b0mb",
       "display_name": "at0m-b0mb"
