@@ -26,6 +26,7 @@ public:
     void start();
     void show_status_screen();
     void show_cable_screen();
+    void show_payloads_screen();
     void request_page(model::AppPage page);
     void flush_requested_page();
     lv_obj_t* current_screen() const;

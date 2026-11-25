@@ -8,6 +8,7 @@
 
 #include "status_screen.h"
 #include "cable_screen.h"
+#include "payloads_screen.h"
 
 namespace app {
 namespace {
@@ -65,6 +66,12 @@ void ScreenManager::show_cable_screen() {
     has_loaded_page_ = true;
 }
 
+void ScreenManager::show_payloads_screen() {
+    load_screen(std::make_unique<screen::PayloadsScreen>(view_model_, assets_));
+    loaded_page_ = model::AppPage::Payloads;
+    has_loaded_page_ = true;
+}
+
 void ScreenManager::request_page(model::AppPage page) {
     requested_page_ = page;
 
@@ -82,6 +89,10 @@ void ScreenManager::flush_requested_page() {
         return;
     }
 
+    if (requested_page_ == model::AppPage::Payloads) {
+        show_payloads_screen();
+        return;
+    }
     if (requested_page_ == model::AppPage::Cable) {
         show_cable_screen();
         return;

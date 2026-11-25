@@ -38,6 +38,13 @@ constexpr std::array<ShortcutSpec, 3> kCableShortcuts = {{
     {"Enter", "Deploy"},
 }};
 
+// "Run" is named, not implied: it types into whatever is plugged in.
+constexpr std::array<ShortcutSpec, 3> kPayloadShortcuts = {{
+    {"ESC", "Back"},
+    {"Enter", "Run"},
+    {"X", "Stop all"},
+}};
+
 } // namespace
 
 NavBar::NavBar(lv_obj_t* parent, viewmodel::BaseViewModel& view_model, app::AssetManager& assets)
@@ -102,7 +109,9 @@ void NavBar::create_shortcut_hints() {
     }
 
     for (size_t index = 0; index < kCableShortcuts.size(); ++index) {
-        const auto& shortcut = kCableShortcuts[index];
+        const auto& shortcut = view_model_.current_page() == model::AppPage::Payloads
+                                   ? kPayloadShortcuts[index]
+                                   : kCableShortcuts[index];
         auto* item = lv_obj_create(shortcut_bar_);
         lv_obj_remove_style_all(item);
         lv_obj_set_size(item, LV_SIZE_CONTENT, LV_PCT(100));
@@ -148,6 +157,7 @@ void NavBar::create_icon_buttons() {
 
 void NavBar::update_icon_buttons() {
     const bool is_cable_page = view_model_.current_page() == model::AppPage::Cable;
+    const bool is_payloads_page = view_model_.current_page() == model::AppPage::Payloads;
     const bool is_dark_mode = view_model_.is_dark_mode();
     const auto colors = view::palette(is_dark_mode);
     const char* theme_icon = is_dark_mode ? ICON_SUN : ICON_MOON;
@@ -168,14 +178,14 @@ void NavBar::update_icon_buttons() {
         {"", toggle_page_cb},
     }};
 
-    platform::set_nav_shortcut_mode(is_cable_page);
+    platform::set_nav_shortcut_mode(is_cable_page || is_payloads_page);
     for (auto* key_label : shortcut_key_labels_) {
         if (key_label) {
             lv_obj_set_style_text_color(key_label, colors.brass, 0);
         }
     }
     if (shortcut_bar_) {
-        if (is_cable_page) {
+        if (is_cable_page || is_payloads_page) {
             lv_obj_remove_flag(shortcut_bar_, LV_OBJ_FLAG_HIDDEN);
         }
         else {
@@ -183,7 +193,7 @@ void NavBar::update_icon_buttons() {
         }
     }
 
-    const auto& icons = is_cable_page ? cable_icons : status_icons;
+    const auto& icons = (is_cable_page || is_payloads_page) ? cable_icons : status_icons;
     for (size_t i = 0; i < icon_buttons_.size(); ++i) {
         auto& button = icon_buttons_[i];
         if (!button) {
@@ -192,7 +202,7 @@ void NavBar::update_icon_buttons() {
 
         button->set_text(icons[i].text);
         if (button->root()) {
-            if (is_cable_page) {
+            if (is_cable_page || is_payloads_page) {
                 lv_obj_add_flag(button->root(), LV_OBJ_FLAG_HIDDEN);
             }
             else {

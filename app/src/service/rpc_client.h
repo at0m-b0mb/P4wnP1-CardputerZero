@@ -28,6 +28,13 @@ struct DeployOutcome {
     std::string sent_body;   // what was actually deployed, for the test to inspect
 };
 
+struct RunOutcome {
+    bool ok = false;
+    int job_id = 0;
+    std::string error;
+    std::string sent_path;  // the absolute path we actually asked for
+};
+
 struct RpcResult {
     bool ok = false;
     long http_status = 0;
@@ -70,6 +77,23 @@ public:
     // enabled_keys are the toggle keys to switch on; every other known toggle
     // is switched off, so the deployed composition is exactly what was ticked.
     DeployOutcome deploy_gadget(const std::vector<std::string>& enabled_keys);
+
+    // Stored payloads, by bare name.
+    //
+    // ListStoredHIDScripts returns bare names ("recon.js") while
+    // HIDRunScriptJob demands an ABSOLUTE path and rejects anything else with
+    // "HIDScript path rejected: path must be absolute". Feeding one straight
+    // into the other is the obvious thing to do and is wrong; run_payload
+    // does the joining so no caller has to know.
+    std::vector<std::string> list_payloads();
+
+    // Start one. Returns the job id, or 0 with an error set. The call returns
+    // as soon as the job starts, so the timeout covers the start and never
+    // the script itself.
+    RunOutcome run_payload(const std::string& bare_name);
+
+    // Stop everything that is running.
+    bool cancel_all_jobs();
 
     const std::string& base_url() const { return base_url_; }
     void set_timeout_ms(long ms) { timeout_ms_ = ms; }

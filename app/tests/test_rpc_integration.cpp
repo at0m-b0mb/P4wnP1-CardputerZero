@@ -134,6 +134,37 @@ int main(int argc, char** argv) {
               "...in the service's own words, not ours");
     }
 
+    std::printf("\n  payloads\n");
+    {
+        service::RpcClient client(base, good);
+        const std::vector<std::string> names = client.list_payloads();
+        check(names.size() == 5, "five stored payloads are listed");
+        check(!names.empty() && names[0] == "hello.js", "...by bare name, as the service sends them");
+    }
+    {
+        service::RpcClient client(base, good);
+        const service::RunOutcome out = client.run_payload("win_recon.js");
+        check(out.ok, "a payload starts");
+        check(out.job_id == 42, "...and its job id comes back");
+        // The trap: a bare name is refused by the device. We must have joined.
+        check(out.sent_path == "/usr/local/P4wnP1/HIDScripts/win_recon.js",
+              "...having been sent as an ABSOLUTE path, not the bare name");
+    }
+    {
+        // Prove the fake service would have refused a bare name, so the check
+        // above is testing something real rather than agreeing with itself.
+        service::RpcClient client(base, good);
+        const service::RpcResult r =
+            client.call("HIDRunScriptJob", R"({"scriptPath":"win_recon.js","timeoutSeconds":0})");
+        check(!r.ok && r.http_status == 400, "a bare name really is refused");
+        check(r.body.find("must be absolute") != std::string::npos,
+              "...with the device's own wording");
+    }
+    {
+        service::RpcClient client(base, good);
+        check(client.cancel_all_jobs(), "running jobs can be cancelled");
+    }
+
     std::printf("\n%s\n", failures == 0 ? "ALL RPC CHECKS PASS" : "RPC FAILURES PRESENT");
     return failures == 0 ? 0 : 1;
 }

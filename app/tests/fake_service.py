@@ -49,10 +49,18 @@ REPLIES = {
         "TriggerActions": [{"isActive": True}, {"isActive": True}, {"isActive": False}]
     },
     "HIDGetRunningScriptJobs": {"ids": [7]},
+    # Bare names, exactly as the real ListStoredHIDScripts returns them. The
+    # run below refuses anything that is not an absolute path, which is what
+    # the device does and what makes the trap reproducible here.
+    "ListStoredHIDScripts": {"msgArray": [
+        "hello.js", "linux_enum.js", "mac_prompt.js", "win_recon.js", "exfil_wifi.js",
+    ]},
+    "HIDCancelAllScriptJobs": {},
 }
 
 seen = []
 deployed = []          # every gadget message the client sent us
+ran = []               # every scriptPath the client asked us to run
 refuse_deploy = [None] # set to a message to make the next deploy fail
 
 
@@ -77,6 +85,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, {"seen": seen})
         elif self.path == "/__deployed":
             self._send(200, {"deployed": deployed})
+        elif self.path == "/__ran":
+            self._send(200, {"ran": ran})
         elif self.path.startswith("/__refuse/"):
             refuse_deploy[0] = self.path[len("/__refuse/"):].replace("%20", " ")
             self._send(200, {"ok": True})
@@ -98,6 +108,20 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length") or 0)
         raw = self.rfile.read(length)
         seen.append(method)
+
+        if method == "HIDRunScriptJob":
+            try:
+                payload = json.loads(raw.decode() or "null")
+            except ValueError:
+                payload = None
+            path = (payload or {}).get("scriptPath", "")
+            ran.append(path)
+            # The device checks this and says exactly this.
+            if not path.startswith("/"):
+                self._send(400, {"error": "HIDScript path rejected: path must be absolute"})
+                return
+            self._send(200, {"id": 42})
+            return
 
         if method == "DeployGadgetSetting":
             try:

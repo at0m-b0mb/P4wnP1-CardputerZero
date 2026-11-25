@@ -105,6 +105,11 @@ void BaseViewModel::show_cable_page() {
     publish_all();
 }
 
+void BaseViewModel::show_payloads_page() {
+    model_.set_current_page(model::AppPage::Payloads);
+    publish_all();
+}
+
 void BaseViewModel::toggle_page() {
     model_.toggle_page();
     publish_all();

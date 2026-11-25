@@ -14,6 +14,7 @@
 #include "screenshot_service.h"
 #include "screen_manager.h"
 #include "cable_screen.h"
+#include "payloads_screen.h"
 #include "base_viewmodel.h"
 #include "theme.h"
 #include "toast.h"
@@ -170,6 +171,46 @@ private:
             return true;
         }
 
+        // Payloads screen: move the cursor, run under confirmation, stop all.
+        if (view_model_.current_page() == model::AppPage::Payloads && !long_pressed) {
+            const int rows = screen::payload_count();
+            switch (key) {
+                case LV_KEY_UP:
+                    view_model_.move_gadget_cursor(-1, rows);
+                    return true;
+                case LV_KEY_DOWN:
+                    view_model_.move_gadget_cursor(1, rows);
+                    return true;
+                case LV_KEY_ENTER:
+                    if (view_model_.deploy_state() == 0 && rows > 0) {
+                        view_model_.set_deploy_state(1);
+                    }
+                    return true;
+                case 'y':
+                case 'Y':
+                    if (view_model_.deploy_state() == 1) {
+                        view_model_.set_deploy_state(2);
+                        lv_refr_now(nullptr);
+                        screen::run_selected_payload(view_model_);
+                    }
+                    return true;
+                case 'n':
+                case 'N':
+                    if (view_model_.deploy_state() != 0) {
+                        view_model_.set_deploy_state(0);
+                    }
+                    return true;
+                case 'x':
+                case 'X':
+                    // Stop needs no confirmation: it only ever reduces what
+                    // the attached host is being told.
+                    screen::cancel_all_payloads(view_model_);
+                    return true;
+                default:
+                    break;
+            }
+        }
+
         // Cable screen: move the cursor and toggle a function. Selection is
         // local only -- nothing here reaches the USB controller until a deploy
         // is confirmed, which is what the footer on that screen says.
@@ -221,8 +262,9 @@ private:
 
         // On the Cable screen, Esc first dismisses a confirm or a result; only
         // once the screen is idle does it mean "go back".
-        if (view_model_.current_page() == model::AppPage::Cable && key == LV_KEY_ESC &&
-            !long_pressed && view_model_.deploy_state() != 0) {
+        if ((view_model_.current_page() == model::AppPage::Cable ||
+             view_model_.current_page() == model::AppPage::Payloads) &&
+            key == LV_KEY_ESC && !long_pressed && view_model_.deploy_state() != 0) {
             view_model_.set_deploy_state(0);
             return true;
         }
@@ -355,11 +397,15 @@ int Application::run() {
                  loaded_config_path,
                  config.dark_mode ? "yes" : "no");
 
-        // P4WNP1_PAGE=status|cable: open straight to a page. Used with
-        // P4WNP1_SHOT to capture each screen without driving the keypad.
+        // P4WNP1_PAGE=status|cable|payloads: open straight to a page. Used
+        // with P4WNP1_SHOT to capture each screen without driving the keypad.
         if (const char* page = std::getenv("P4WNP1_PAGE")) {
-            if (std::string(page) == "cable") {
+            const std::string want(page);
+            if (want == "cable") {
                 view_model.show_cable_page();
+            }
+            else if (want == "payloads") {
+                view_model.show_payloads_page();
             }
             else {
                 view_model.show_status_page();

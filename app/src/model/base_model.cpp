@@ -38,7 +38,13 @@ void BaseModel::set_current_page(AppPage page) {
 }
 
 void BaseModel::toggle_page() {
-    current_page_ = current_page_ == AppPage::Status ? AppPage::Cable : AppPage::Status;
+    // Three pages now, so this cycles rather than flips.
+    switch (current_page_) {
+        case AppPage::Status:   current_page_ = AppPage::Cable;    break;
+        case AppPage::Cable:    current_page_ = AppPage::Payloads; break;
+        case AppPage::Payloads:
+        default:                current_page_ = AppPage::Status;   break;
+    }
 }
 
 } // namespace model

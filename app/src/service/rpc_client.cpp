@@ -163,6 +163,74 @@ DeployOutcome RpcClient::deploy_gadget(const std::vector<std::string>& enabled_k
     return outcome;
 }
 
+// Where the service keeps stored payloads. It has to be spelled out because
+// the list and run RPCs disagree about what a payload is called.
+constexpr const char* kHidScriptDir = "/usr/local/P4wnP1/HIDScripts";
+
+std::vector<std::string> RpcClient::list_payloads() {
+    std::vector<std::string> names;
+    const RpcResult r = call("ListStoredHIDScripts");
+    if (!r.ok) {
+        return names;
+    }
+    const nlohmann::json doc = nlohmann::json::parse(r.body, nullptr, false);
+    if (doc.is_discarded() || !doc.is_object()) {
+        return names;
+    }
+    const auto arr = doc.find("msgArray");
+    if (arr == doc.end() || !arr->is_array()) {
+        return names;
+    }
+    for (const auto& entry : *arr) {
+        if (entry.is_string()) {
+            names.push_back(entry.get<std::string>());
+        }
+    }
+    return names;
+}
+
+RunOutcome RpcClient::run_payload(const std::string& bare_name) {
+    RunOutcome outcome;
+    if (bare_name.empty()) {
+        outcome.error = "no payload selected";
+        return outcome;
+    }
+
+    // The join the service insists on. A bare name here is refused.
+    outcome.sent_path = bare_name.front() == '/'
+                            ? bare_name
+                            : std::string(kHidScriptDir) + "/" + bare_name;
+
+    nlohmann::json body;
+    body["scriptPath"] = outcome.sent_path;
+    body["timeoutSeconds"] = 0;
+
+    const RpcResult r = call("HIDRunScriptJob", body.dump());
+    if (!r.ok) {
+        if (!r.error.empty()) {
+            outcome.error = "no service: " + r.error;
+        }
+        else {
+            const nlohmann::json err = nlohmann::json::parse(r.body, nullptr, false);
+            outcome.error = (!err.is_discarded() && err.is_object() && err.contains("error"))
+                                ? err["error"].get<std::string>()
+                                : "the service refused to run it";
+        }
+        return outcome;
+    }
+
+    const nlohmann::json doc = nlohmann::json::parse(r.body, nullptr, false);
+    if (!doc.is_discarded() && doc.is_object()) {
+        outcome.job_id = doc.value("id", 0);
+    }
+    outcome.ok = true;
+    return outcome;
+}
+
+bool RpcClient::cancel_all_jobs() {
+    return call("HIDCancelAllScriptJobs").ok;
+}
+
 bool RpcClient::reachable() {
     return call("GetDeployedGadgetSetting").ok;
 }

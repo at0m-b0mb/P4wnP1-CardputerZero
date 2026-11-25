@@ -9,8 +9,9 @@
 namespace model {
 
 enum class AppPage {
-    Status = 0,
-    Cable  = 1,
+    Status   = 0,
+    Cable    = 1,
+    Payloads = 2,
 };
 
 class BaseModel {

@@ -49,6 +49,7 @@ public:
     model::AppPage current_page() const;
     void show_status_page();
     void show_cable_page();
+    void show_payloads_page();
     void toggle_page();
     void toggle_selected_gadget(int bit_count);
     void move_gadget_cursor(int delta, int row_count);
