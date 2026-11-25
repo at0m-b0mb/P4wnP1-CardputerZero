@@ -1,4 +1,4 @@
-# Proteus — P4wnP1 on the Cardputer Zero, as an app
+# P4wnP1 A.L.O.A. on the CardputerZero, as an app
 
 Draft plan, 2026-11-24. No hardware yet; every claim below is labelled.
 
@@ -74,7 +74,7 @@ the device's own boot scripts."*
 > uninstall. Never at install time. This single property is what makes it an app you can
 > remove rather than an OS you commit to.
 
-**4. GPL-3.0.** P4wnP1 is GPL-3.0 and this is a derivative, so Proteus is GPL-3.0 — declared
+**4. GPL-3.0.** P4wnP1 is GPL-3.0 and this is a derivative, so this panel is GPL-3.0 — declared
 in `app-builder.json`'s SPDX `license` field. Unlike your MIT Pharos/Aegis work. Worth
 stating so it does not get mislabelled at publish time.
 
