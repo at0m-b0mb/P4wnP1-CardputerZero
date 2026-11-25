@@ -9,21 +9,54 @@
 #include "asset_manager.h"
 #include "bindings.h"
 #include "theme.h"
+#include "rpc_client.h"
 #include "ui_const.h"
 
 #include <cstdio>
+#include <cstdlib>
+#include <string>
 
 namespace screen {
 namespace {
 
-// Nothing has asked the service anything yet, so every field stays at its
-// "unknown" default. The screen renders that honestly rather than inventing a
-// device to look at.
-StatusSnapshot current_status() {
-    return StatusSnapshot{};
+// Where the service is. Overridable so the panel can be pointed at a stand-in
+// while there is no device, which is also how the screenshots are made.
+std::string api_base() {
+    if (const char* v = std::getenv("P4WNP1_API")) {
+        return v;
+    }
+    return "http://127.0.0.1:8000";
 }
 
-constexpr const char* kServiceEndpoint = "127.0.0.1:8000";
+std::string token_path() {
+    if (const char* v = std::getenv("P4WNP1_TOKEN")) {
+        return v;
+    }
+    // The service's own local credential, the same file its CLI reads, so the
+    // panel holds no credential of its own.
+    return "/run/p4wnp1/local.token";
+}
+
+// Ask the service. Every field it does not answer stays at its "unknown"
+// default and the screen says so, rather than showing a plausible device.
+service::StatusSnapshot current_status() {
+    service::RpcClient client(api_base(), token_path());
+    client.set_timeout_ms(1200);
+    return client.fetch_status();
+}
+
+// Six rows plus a header have to live inside 110px, so the connected view
+// uses a tighter pitch than the default row height.
+constexpr int kConnectedRowPitch = 14;
+
+std::string endpoint_label() {
+    std::string base = api_base();
+    const std::string scheme = "http://";
+    if (base.rfind(scheme, 0) == 0) {
+        base.erase(0, scheme.size());
+    }
+    return base;
+}
 
 } // namespace
 
@@ -35,7 +68,7 @@ StatusScreen::StatusScreen(viewmodel::BaseViewModel& view_model, app::AssetManag
 void StatusScreen::build_content(lv_obj_t* content) {
     using namespace view;
 
-    const StatusSnapshot status = current_status();
+    const service::StatusSnapshot status = current_status();
     const bool dark = lv_subject_get_int(view_model().dark_mode_subject()) != 0;
     const ThemePalette p = palette(dark);
 
@@ -69,7 +102,9 @@ void StatusScreen::build_content(lv_obj_t* content) {
     // --- the statement -----------------------------------------------------
     // The page leads with one fact, set large and in the colour of its own
     // severity, instead of a row of equally weighted fields.
-    if (!status.link_up) {
+    const bool any_answer = status.usb_ok || status.net_ok || status.wifi_ok || status.jobs_ok;
+
+    if (!any_answer) {
         text_at("No service", face(f_head), p.error, 6);
         text_at("Nothing here is measured.", face(f_note), p.text_secondary, 25);
 
@@ -78,16 +113,25 @@ void StatusScreen::build_content(lv_obj_t* content) {
         // What it is waiting for, so the empty state is actionable rather than
         // just blank. Brass used once, on the one thing worth looking at.
         text_at("Waiting for a P4wnP1 service at", face(f_note), p.text_disabled, 56);
-        text_at(kServiceEndpoint, face(f_value), p.brass, 72);
+        text_at(endpoint_label().c_str(), face(f_value), p.brass, 72);
         return;
     }
 
-    text_at("Service up", face(f_head), p.success, 6);
-    text_at("Figures below are what the service reports.", face(f_note), p.text_secondary, 25);
-    rule_at(46);
+    // Connected, so the statement is implied by there being figures at all.
+    // It shrinks to one line and gives its space to the rows -- six of them do
+    // not fit under a headline and a rule on a 110px content area.
+    text_at("Service up", face(f_note), p.success, 2);
+    {
+        auto* where = lv_label_create(content);
+        lv_label_set_text(where, endpoint_label().c_str());
+        lv_obj_set_style_text_font(where, face(f_note), 0);
+        lv_obj_set_style_text_color(where, p.text_disabled, 0);
+        lv_obj_align(where, LV_ALIGN_TOP_RIGHT, -metric::kGutter, 2);
+    }
+    rule_at(16);
 
     // --- the facts ---------------------------------------------------------
-    int y = 54;
+    int y = 22;
     const auto row = [&](const char* name, const char* value, lv_color_t colour) {
         auto* k = lv_label_create(content);
         lv_label_set_text(k, name);
@@ -100,17 +144,27 @@ void StatusScreen::build_content(lv_obj_t* content) {
         lv_obj_set_style_text_font(v, face(f_value), 0);
         lv_obj_set_style_text_color(v, colour, 0);
         lv_obj_align(v, LV_ALIGN_TOP_LEFT, metric::kGutter + 84, y);
-        y += metric::kRowHeight;
+        y += kConnectedRowPitch;
     };
 
     char buf[64];
-    row("USB", status.usb_composed ? status.usb_functions : "not composed",
-        status.usb_composed ? p.text : p.text_disabled);
-    row("usbeth", status.usbeth_addr[0] ? status.usbeth_addr : "none",
-        status.usbeth_addr[0] ? p.text : p.text_disabled);
-    row("wlan0", status.wlan_addr[0] ? status.wlan_addr : "none",
-        status.wlan_addr[0] ? p.text : p.text_disabled);
+    const std::string usb = service::usb_summary(status);
+    const std::string usbeth = service::interface_ip(status, "usbeth");
+    const std::string wlan = service::interface_ip(status, "wlan0");
 
+    row("USB", status.usb_ok ? usb.c_str() : "unknown",
+        status.usb_composed ? p.text : p.text_disabled);
+    row("usbeth", usbeth.empty() ? "none" : usbeth.c_str(),
+        usbeth.empty() ? p.text_disabled : p.text);
+    row("wlan0", wlan.empty() ? "none" : wlan.c_str(),
+        wlan.empty() ? p.text_disabled : p.text);
+    row("Wi-Fi", status.wifi_ok ? status.wifi.c_str() : "unavailable",
+        status.wifi_ok ? p.text : p.text_disabled);
+
+    if (status.reflexes_ok) {
+        std::snprintf(buf, sizeof(buf), "%d of %d armed", status.reflexes_armed, status.reflexes);
+        row("Reflexes", buf, status.reflexes_armed > 0 ? p.text : p.text_disabled);
+    }
     std::snprintf(buf, sizeof(buf), "%d running", status.jobs_running);
     row("Jobs", buf, status.jobs_running > 0 ? p.text : p.text_disabled);
 }

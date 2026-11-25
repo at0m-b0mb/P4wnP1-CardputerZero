@@ -42,6 +42,18 @@ endif()
 
 include(FetchContent)
 
+# The service client: JSON by header, HTTP by libcurl. Both are in Debian, so
+# the .deb picks them up as ordinary dependencies.
+FetchContent_Declare(
+    nlohmann_json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG v3.11.3
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(nlohmann_json)
+find_package(CURL REQUIRED)
+
+
 
 # lvgl - main ui framework
 set(CONFIG_LV_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
@@ -447,6 +459,30 @@ target_include_directories(${PROJECT_NAME}_model
 )
 
 # ====================================================
+# Service client sources
+# ====================================================
+file(GLOB_RECURSE SERVICE_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/service/*.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/service/*.cpp"
+)
+
+add_library(${PROJECT_NAME}_service
+    STATIC
+    ${SERVICE_SOURCES}
+)
+
+target_include_directories(${PROJECT_NAME}_service
+    PUBLIC
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/service"
+)
+
+target_link_libraries(${PROJECT_NAME}_service
+    PUBLIC
+        nlohmann_json::nlohmann_json
+        CURL::libcurl
+)
+
+# ====================================================
 # View sources
 # ====================================================
 file(GLOB_RECURSE REACTIVE_SOURCES CONFIGURE_DEPENDS
@@ -496,6 +532,7 @@ target_include_directories(${PROJECT_NAME}_view
 
 target_link_libraries(${PROJECT_NAME}_view
     PUBLIC
+        ${PROJECT_NAME}_service
         lvgl
         ${PROJECT_NAME}_reactive
         ${PROJECT_NAME}_platform
@@ -595,6 +632,7 @@ target_link_libraries(${PROJECT_NAME}_core
     PUBLIC
         lvgl
         logger
+        ${PROJECT_NAME}_service
         ${PROJECT_NAME}_view
         ${PROJECT_NAME}_viewmodel
         ${PROJECT_NAME}_platform
