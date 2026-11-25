@@ -6,6 +6,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/at0m-b0mb/P4wnP1-CardputerZero/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/at0m-b0mb/P4wnP1-CardputerZero?include_prereleases&label=release&color=8A6A1F"></a>
   <a href="LICENSE"><img alt="Licence" src="https://img.shields.io/badge/licence-GPL--3.0--only-8A6A1F"></a>
   <img alt="Target" src="https://img.shields.io/badge/target-CardputerZero%20%C2%B7%20aarch64-1A1713">
   <img alt="Package" src="https://img.shields.io/badge/package-p4wnp1--panel.deb-1A1713">
@@ -19,6 +20,20 @@ an M5Stack CardputerZero, packaged as an ordinary Debian package.
 **The point is that the device does not need a different SD card to become a USB rig.** It
 installs onto the stock CardputerZero OS, it removes cleanly, and while it is not in use the
 device's own Wi-Fi settings keep working.
+
+## Install
+
+Grab the package from [the latest release](https://github.com/at0m-b0mb/P4wnP1-CardputerZero/releases/latest)
+and install it on the device:
+
+```bash
+sudo apt install ./P4wnP1_0.2.1_rev1_arm64.deb
+```
+
+It appears in APPLaunch as **P4wnP1**. `apt remove` leaves the device as it was found; `apt
+purge` additionally removes `/etc/p4wnp1_panel.conf`. The current release is marked a
+**pre-release** because it has not yet run on a CardputerZero — see
+[Not yet verified on hardware](#not-yet-verified-on-hardware).
 
 <p align="center">
   <picture>
