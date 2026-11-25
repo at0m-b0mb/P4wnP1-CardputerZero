@@ -22,6 +22,7 @@
 #pragma once
 
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace service {
@@ -63,6 +64,10 @@ bool parse_ethernet_interfaces(const std::string& json, StatusSnapshot& out);
 bool parse_wifi_state(const std::string& json, StatusSnapshot& out);
 bool parse_trigger_actions(const std::string& json, StatusSnapshot& out);
 bool parse_running_jobs(const std::string& json, StatusSnapshot& out);
+
+// The toggle keys and their labels, in the order both screens list them.
+// Shared so the parser and the deploy cannot disagree about what exists.
+const std::vector<std::pair<std::string, std::string>>& usb_toggle_table();
 
 // The label shown for a composed gadget, e.g. "Keyboard, RNDIS net".
 std::string usb_summary(const StatusSnapshot& snapshot);

@@ -30,6 +30,14 @@ public:
     // is what WOULD be deployed, not what the device is presenting.
     lv_subject_t* gadget_mask_subject();
     lv_subject_t* gadget_cursor_subject();
+
+    // Deploying is the first thing the panel does that changes something
+    // outside the device, so it is a state the screen can see rather than a
+    // function call that happens silently.
+    //   0 idle  1 confirming  2 deploying  3 deployed  4 refused
+    lv_subject_t* deploy_state_subject();
+    int32_t deploy_state() const;
+    void set_deploy_state(int32_t state);
     lv_subject_t* bold_text_subject();
     lv_subject_t* info_visible_subject();
     lv_subject_t* quit_requested_subject();
@@ -60,6 +68,7 @@ private:
     reactive::IntSubject current_page_subject_;
     reactive::IntSubject gadget_mask_subject_;
     reactive::IntSubject gadget_cursor_subject_;
+    reactive::IntSubject deploy_state_subject_;
     reactive::BoolSubject bold_text_subject_;
     reactive::BoolSubject info_visible_subject_;
     reactive::BoolSubject quit_requested_subject_;

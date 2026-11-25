@@ -190,9 +190,41 @@ private:
                 case ' ':
                     view_model_.toggle_selected_gadget(screen::kGadgetRows);
                     return true;
+                case LV_KEY_ENTER:
+                    // Refuse an over-budget composition here, with a reason,
+                    // rather than letting the service refuse it afterwards
+                    // with an arithmetic message and no indication of what to
+                    // turn off. The footer is already saying which it is.
+                    if (view_model_.deploy_state() == 0 &&
+                        !screen::selection_over_budget(view_model_)) {
+                        view_model_.set_deploy_state(1);  // ask first
+                    }
+                    return true;
+                case 'y':
+                case 'Y':
+                    if (view_model_.deploy_state() == 1) {
+                        view_model_.set_deploy_state(2);
+                        lv_refr_now(nullptr);  // show "Deploying..." before we block
+                        screen::deploy_selected(view_model_);
+                    }
+                    return true;
+                case 'n':
+                case 'N':
+                    if (view_model_.deploy_state() != 0) {
+                        view_model_.set_deploy_state(0);
+                    }
+                    return true;
                 default:
                     break;
             }
+        }
+
+        // On the Cable screen, Esc first dismisses a confirm or a result; only
+        // once the screen is idle does it mean "go back".
+        if (view_model_.current_page() == model::AppPage::Cable && key == LV_KEY_ESC &&
+            !long_pressed && view_model_.deploy_state() != 0) {
+            view_model_.set_deploy_state(0);
+            return true;
         }
 
         const bool is_escape = key == LV_KEY_ESC;
@@ -333,6 +365,13 @@ int Application::run() {
                 view_model.show_status_page();
             }
             LOG_INFO("opening page: {}", page);
+        }
+
+        // P4WNP1_DEPLOY_STATE: open on a given Cable state. Screenshot
+        // tooling, alongside P4WNP1_PAGE -- every state the operator can see
+        // should be capturable without reproducing it by hand.
+        if (const char* state = std::getenv("P4WNP1_DEPLOY_STATE")) {
+            view_model.set_deploy_state(std::atoi(state));
         }
     } else {
         LOG_WARN("failed to load config {}: {}; using defaults", loaded_config_path, config_error);

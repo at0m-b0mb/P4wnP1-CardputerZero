@@ -22,6 +22,7 @@ BaseViewModel::BaseViewModel()
       current_page_subject_(page_to_int(model_.current_page())),
       gadget_mask_subject_(0b000011),
       gadget_cursor_subject_(0),
+      deploy_state_subject_(0),
       bold_text_subject_(false),
       info_visible_subject_(false),
       quit_requested_subject_(false) {}
@@ -50,6 +51,18 @@ lv_subject_t* BaseViewModel::gadget_mask_subject() {
 
 lv_subject_t* BaseViewModel::gadget_cursor_subject() {
     return gadget_cursor_subject_.native();
+}
+
+lv_subject_t* BaseViewModel::deploy_state_subject() {
+    return deploy_state_subject_.native();
+}
+
+int32_t BaseViewModel::deploy_state() const {
+    return deploy_state_subject_.value();
+}
+
+void BaseViewModel::set_deploy_state(int32_t state) {
+    deploy_state_subject_.set(state);
 }
 
 lv_subject_t* BaseViewModel::bold_text_subject() {

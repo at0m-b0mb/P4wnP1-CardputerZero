@@ -149,6 +149,18 @@ bool parse_running_jobs(const std::string& text, StatusSnapshot& out) {
     return true;
 }
 
+const std::vector<std::pair<std::string, std::string>>& usb_toggle_table() {
+    static const std::vector<std::pair<std::string, std::string>> table = [] {
+        std::vector<std::pair<std::string, std::string>> v;
+        v.reserve(kUsbToggles.size());
+        for (const auto& [key, label] : kUsbToggles) {
+            v.emplace_back(key, label);
+        }
+        return v;
+    }();
+    return table;
+}
+
 std::string usb_summary(const StatusSnapshot& snapshot) {
     if (!snapshot.usb_ok) {
         return "";

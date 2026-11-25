@@ -101,8 +101,28 @@ set(APP_DEBIAN_DEPENDS "libc6, libstdc++6, libgcc-s1, libfreetype6, libpng16-16,
 if(FMT_INCLUDE_DIR AND FMT_LIBRARY)
     string(APPEND APP_DEBIAN_DEPENDS ", libfmt10")
 endif()
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "${APP_DEBIAN_DEPENDS}")
-set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS OFF)
+# Generate Depends from what the binary actually links, and keep the
+# hand-written list only as the floor beneath it.
+#
+# The list above is maintained by hand, which means adding a library to the
+# build silently leaves it stale: libcurl arrived with the service client and
+# the package went on declaring seven dependencies for a binary that needed
+# eight. dpkg would have installed it happily onto a device missing libcurl4
+# and the app would have failed at the dynamic linker with nothing explaining
+# why. shlibdeps reads the ELF, so it cannot drift.
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+
+# When shlibdeps can run it is the only list worth having: it reads the ELF,
+# so it names libcurl4t64 and libpng16-16t64 correctly and cannot go stale the
+# next time a library is linked. The hand-written list is kept only as the
+# fallback for builds where dpkg-shlibdeps is not available, and is otherwise
+# left out rather than merged -- merging produced duplicate entries and two
+# package names that do not exist on trixie.
+if(CPACK_DEBIAN_PACKAGE_SHLIBDEPS)
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS "")
+else()
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS "${APP_DEBIAN_DEPENDS}")
+endif()
 set(CPACK_DEBIAN_PACKAGE_CONTROL_STRICT_PERMISSION TRUE)
 
 configure_file(

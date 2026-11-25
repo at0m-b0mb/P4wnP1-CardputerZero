@@ -8,6 +8,8 @@
 
 #include <curl/curl.h>
 
+#include <nlohmann/json.hpp>
+
 #include <fstream>
 #include <sstream>
 #include <utility>
@@ -104,6 +106,61 @@ RpcResult RpcClient::call(const std::string& method, const std::string& json_bod
     curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
     return result;
+}
+
+DeployOutcome RpcClient::deploy_gadget(const std::vector<std::string>& enabled_keys) {
+    DeployOutcome outcome;
+
+    // Read first. The gadget message is not ours to reconstruct.
+    const RpcResult current = call("GetDeployedGadgetSetting");
+    if (!current.ok) {
+        outcome.error = current.error.empty() ? "the service refused to report the gadget"
+                                              : "no service: " + current.error;
+        return outcome;
+    }
+
+    nlohmann::json gs = nlohmann::json::parse(current.body, nullptr, false);
+    if (gs.is_discarded() || !gs.is_object()) {
+        outcome.error = "the service sent a gadget setting we cannot read";
+        return outcome;
+    }
+
+    // Every known toggle is written explicitly, so the deployed composition is
+    // exactly what was ticked rather than what was ticked plus whatever was
+    // already on.
+    for (const auto& [key, label] : usb_toggle_table()) {
+        (void)label;
+        gs[key] = false;
+    }
+    for (const auto& key : enabled_keys) {
+        gs[key] = true;
+    }
+
+    // See the header: this is forced, not carried.
+    gs["enabled"] = true;
+
+    outcome.sent_body = gs.dump();
+    const RpcResult deployed = call("DeployGadgetSetting", outcome.sent_body);
+    if (!deployed.ok) {
+        if (!deployed.error.empty()) {
+            outcome.error = "no service: " + deployed.error;
+        }
+        else if (!deployed.body.empty()) {
+            // The service explains refusals in words, including the endpoint
+            // overflow. Show its words rather than inventing our own.
+            const nlohmann::json err = nlohmann::json::parse(deployed.body, nullptr, false);
+            outcome.error = (!err.is_discarded() && err.is_object() && err.contains("error"))
+                                ? err["error"].get<std::string>()
+                                : "the service refused the deploy";
+        }
+        else {
+            outcome.error = "the service refused the deploy";
+        }
+        return outcome;
+    }
+
+    outcome.ok = true;
+    return outcome;
 }
 
 bool RpcClient::reachable() {

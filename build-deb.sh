@@ -9,6 +9,7 @@ docker run --rm -v "$PWD/app:/src" -w /src debian:trixie-slim bash -eux -c '
   apt-get install -y -qq --no-install-recommends \
       build-essential cmake ninja-build pkg-config git ca-certificates \
       libpng-dev libjpeg62-turbo-dev libfreetype-dev zlib1g-dev libfmt-dev \
+      libcurl4-openssl-dev \
       dpkg-dev file >/dev/null
 
   rm -rf build/cm0-native

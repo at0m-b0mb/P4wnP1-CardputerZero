@@ -14,8 +14,12 @@
 
 #include "../src/service/rpc_client.h"
 
+#include <nlohmann/json.hpp>
+
 #include <cstdio>
 #include <string>
+#include <vector>
+#include <cstdlib>
 
 namespace {
 
@@ -85,6 +89,49 @@ int main(int argc, char** argv) {
         service::RpcClient client(base, good);
         const service::RpcResult r = client.call("NoSuchMethod");
         check(!r.ok && r.http_status == 404, "is a 404, not a crash");
+    }
+
+    std::printf("\n  deploying a composition\n");
+    {
+        service::RpcClient client(base, good);
+        const service::DeployOutcome out =
+            client.deploy_gadget({"use_HID_KEYBOARD", "use_UMS"});
+        check(out.ok, "the deploy is accepted");
+
+        const nlohmann::json sent = nlohmann::json::parse(out.sent_body, nullptr, false);
+        check(!sent.is_discarded() && sent.is_object(), "...and what we sent is readable");
+
+        // Read-modify-write: fields we never touched must survive.
+        check(sent.value("vid", "") == "0x1d6b", "vendor id is preserved, not rebuilt");
+        check(sent.value("serial", "") == "deadbeef1337", "serial is preserved");
+        check(sent.value("product", "") == "P4wnP1 by MaMe82", "product name is preserved");
+
+        // The one the upstream comment was written in blood about.
+        check(sent.value("enabled", false), "enabled is FORCED true, though the read said false");
+
+        // Exactly what was ticked, nothing carried over.
+        check(sent.value("use_HID_KEYBOARD", false), "a ticked function is on");
+        check(sent.value("use_UMS", false), "the other ticked function is on");
+        check(!sent.value("use_RNDIS", true),
+              "a function that was on before but not ticked is explicitly off");
+        check(!sent.value("use_HID_MOUSE", true), "an untouched function stays off");
+    }
+
+    std::printf("\n  a deploy the service refuses\n");
+    {
+        // Ask the fake service to refuse the next one the way the real service
+        // refuses an over-budget composition.
+        const std::string cmd = "curl -s -o /dev/null '" + base +
+                          "/__refuse/Gadget%20Settings%20consume%208%20out%20of%207%20available%20USB%20Endpoints'";
+        if (std::system(cmd.c_str()) != 0) {
+            check(false, "could not arm the refusal");
+        }
+
+        service::RpcClient client(base, good);
+        const service::DeployOutcome out = client.deploy_gadget({"use_HID_KEYBOARD"});
+        check(!out.ok, "a refused deploy is reported as failed");
+        check(out.error.find("8 out of 7") != std::string::npos,
+              "...in the service's own words, not ours");
     }
 
     std::printf("\n%s\n", failures == 0 ? "ALL RPC CHECKS PASS" : "RPC FAILURES PRESENT");

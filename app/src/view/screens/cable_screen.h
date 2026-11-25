@@ -40,6 +40,15 @@ struct GadgetFunction {
 // so it is defined once here.
 constexpr int kGadgetRows = 6;
 
+// Deploy the current selection. Blocking: configfs teardown and rebuild is
+// not instant, and there is nothing useful to do while it happens.
+void deploy_selected(viewmodel::BaseViewModel& view_model);
+
+// Whether the selection exceeds the endpoint budget. Checked before the
+// confirm is even offered, so the operator is stopped by the panel with a
+// readable reason rather than by the service with an arithmetic one.
+bool selection_over_budget(const viewmodel::BaseViewModel& view_model);
+
 class CableScreen : public BaseScreen {
 public:
     CableScreen(viewmodel::BaseViewModel& view_model, app::AssetManager& assets);

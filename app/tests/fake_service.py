@@ -16,7 +16,20 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 TOKEN = "test-token-not-a-real-credential"
 
 REPLIES = {
+    # Carries more than the toggles -- vendor and product ids, a serial, a
+    # name -- precisely so the test can prove a deploy preserves them instead
+    # of rebuilding the message from the checkboxes.
+    #
+    # And "enabled" is False here on purpose: that is what configfs reports
+    # once the gadget is torn down, and a client that carries it faithfully
+    # deploys another disabled gadget. The test asserts we force it true.
     "GetDeployedGadgetSetting": {
+        "enabled": False,
+        "vid": "0x1d6b",
+        "pid": "0x1337",
+        "manufacturer": "MaMe82",
+        "product": "P4wnP1 by MaMe82",
+        "serial": "deadbeef1337",
         "use_HID_KEYBOARD": True,
         "use_HID_MOUSE": False,
         "use_HID_RAW": False,
@@ -39,6 +52,8 @@ REPLIES = {
 }
 
 seen = []
+deployed = []          # every gadget message the client sent us
+refuse_deploy = [None] # set to a message to make the next deploy fail
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -60,6 +75,11 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, {"methods": sorted(REPLIES)})
         elif self.path == "/__seen":
             self._send(200, {"seen": seen})
+        elif self.path == "/__deployed":
+            self._send(200, {"deployed": deployed})
+        elif self.path.startswith("/__refuse/"):
+            refuse_deploy[0] = self.path[len("/__refuse/"):].replace("%20", " ")
+            self._send(200, {"ok": True})
         else:
             self._send(404, {"error": "not found"})
 
@@ -76,8 +96,20 @@ class Handler(BaseHTTPRequestHandler):
 
         method = self.path[len(prefix):]
         length = int(self.headers.get("Content-Length") or 0)
-        self.rfile.read(length)
+        raw = self.rfile.read(length)
         seen.append(method)
+
+        if method == "DeployGadgetSetting":
+            try:
+                deployed.append(json.loads(raw.decode() or "null"))
+            except ValueError:
+                deployed.append({"__unparseable__": raw.decode(errors="replace")})
+            if refuse_deploy[0]:
+                message, refuse_deploy[0] = refuse_deploy[0], None
+                self._send(400, {"error": message})
+                return
+            self._send(200, {})
+            return
 
         if method not in REPLIES:
             self._send(404, {"error": f"unknown method {method}"})

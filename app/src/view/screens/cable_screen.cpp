@@ -8,11 +8,15 @@
 
 #include "asset_manager.h"
 #include "bindings.h"
+#include "rpc_client.h"
 #include "theme.h"
 #include "ui_const.h"
 
 #include <array>
 #include <cstdio>
+#include <cstdlib>
+#include <string>
+#include <vector>
 
 namespace screen {
 namespace {
@@ -32,7 +36,54 @@ constexpr std::array<GadgetFunction, kGadgetRows> kFunctions = {{
 constexpr int kColumnWidth = 150;
 constexpr int kRowPitch    = 15;
 
+// Mirrors the Status screen's resolution of where the service is.
+std::string api_base() {
+    if (const char* v = std::getenv("P4WNP1_API")) {
+        return v;
+    }
+    return "http://127.0.0.1:8000";
+}
+
+std::string token_path() {
+    if (const char* v = std::getenv("P4WNP1_TOKEN")) {
+        return v;
+    }
+    return "/run/p4wnp1/local.token";
+}
+
+// Held across a re-render so the result of the last deploy can be shown.
+std::string g_last_error;
+
 } // namespace
+
+
+void deploy_selected(viewmodel::BaseViewModel& view_model) {
+    std::vector<std::string> keys;
+    const int32_t mask = view_model.gadget_mask();
+    for (int i = 0; i < kGadgetRows; ++i) {
+        if (mask & (1 << i)) {
+            keys.emplace_back(kFunctions[static_cast<std::size_t>(i)].key);
+        }
+    }
+
+    service::RpcClient client(api_base(), token_path());
+    client.set_timeout_ms(8000);  // configfs teardown and rebuild is not instant
+    const service::DeployOutcome out = client.deploy_gadget(keys);
+    g_last_error = out.error;
+    view_model.set_deploy_state(out.ok ? 3 : 4);
+}
+
+bool selection_over_budget(const viewmodel::BaseViewModel& view_model) {
+    const int32_t mask = const_cast<viewmodel::BaseViewModel&>(view_model).gadget_mask();
+    int used = 0;
+    for (int i = 0; i < kGadgetRows; ++i) {
+        if (mask & (1 << i)) {
+            used += kFunctions[static_cast<std::size_t>(i)].cost;
+        }
+    }
+    return used > kEndpointBudget;
+}
+
 
 CableScreen::CableScreen(viewmodel::BaseViewModel& view_model, app::AssetManager& assets)
     : BaseScreen(view_model, assets) {
@@ -53,6 +104,7 @@ void CableScreen::build_content(lv_obj_t* content) {
     // screen being torn down and rebuilt when the page changes.
     lv_subject_add_observer_obj(view_model().gadget_mask_subject(), state_changed, content, this);
     lv_subject_add_observer_obj(view_model().gadget_cursor_subject(), state_changed, content, this);
+    lv_subject_add_observer_obj(view_model().deploy_state_subject(), state_changed, content, this);
 
     render();
 }
@@ -173,13 +225,74 @@ void CableScreen::render() {
         lv_obj_align(c, LV_ALIGN_TOP_LEFT, x + kColumnWidth - 22, y + 1);
     }
 
-    // --- what the selection means ------------------------------------------
-    auto* foot = lv_label_create(content_);
-    lv_label_set_text(foot, over ? "Over budget. Turn something off before deploying."
-                                 : "Not deployed. Nothing has changed on the host.");
-    lv_obj_set_style_text_font(foot, face(f_note), 0);
-    lv_obj_set_style_text_color(foot, over ? p.error : p.text_disabled, 0);
-    lv_obj_align(foot, LV_ALIGN_BOTTOM_LEFT, metric::kGutter, -4);
+    // --- what the selection means, or what just happened -------------------
+    const int32_t deploy_state = view_model().deploy_state();
+
+    const char* message = nullptr;
+    lv_color_t tone = p.text_disabled;
+    switch (deploy_state) {
+        case 1:
+            // The consequence is named, because re-enumeration is something
+            // the attached host notices and the operator may not expect.
+            message = "Deploy? The host's USB link re-enumerates.";
+            tone = p.brass;
+            break;
+        case 2: message = "Deploying..."; tone = p.text_secondary; break;
+        case 3: message = "Deployed. The host sees the new gadget."; tone = p.success; break;
+        case 4:
+            message = g_last_error.empty() ? "The deploy was refused." : g_last_error.c_str();
+            tone = p.error;
+            break;
+        default:
+            message = over ? "Over budget. Turn something off before deploying."
+                           : "Not deployed. Nothing has changed on the host.";
+            tone = over ? p.error : p.text_disabled;
+            break;
+    }
+
+    if (deploy_state == 0) {
+        // Idle: a quiet footer line under the rows.
+        auto* foot = lv_label_create(content_);
+        lv_label_set_text(foot, message);
+        lv_obj_set_style_text_font(foot, face(f_note), 0);
+        lv_obj_set_style_text_color(foot, tone, 0);
+        lv_obj_set_width(foot, kScreenWidth - (metric::kGutter * 2));
+        lv_label_set_long_mode(foot, LV_LABEL_LONG_DOT);
+        lv_obj_align(foot, LV_ALIGN_BOTTOM_LEFT, metric::kGutter, -2);
+        return;
+    }
+
+    // Anything else is a moment that wants the operator's attention, so it is
+    // an opaque band rather than text floating over the rows it would
+    // otherwise collide with.
+    constexpr int kBandHeight = 34;
+    auto* band = lv_obj_create(content_);
+    lv_obj_remove_style_all(band);
+    lv_obj_set_size(band, kScreenWidth, kBandHeight);
+    lv_obj_set_style_bg_color(band, p.surface, 0);
+    lv_obj_set_style_bg_opa(band, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(band, p.border, 0);
+    lv_obj_set_style_border_width(band, metric::kHairline, 0);
+    lv_obj_set_style_border_side(band, LV_BORDER_SIDE_TOP, 0);
+    lv_obj_set_style_pad_all(band, 0, 0);
+    lv_obj_clear_flag(band, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_align(band, LV_ALIGN_BOTTOM_MID, 0, 0);
+
+    auto* text = lv_label_create(band);
+    lv_label_set_text(text, message);
+    lv_obj_set_style_text_font(text, face(f_note), 0);
+    lv_obj_set_style_text_color(text, tone, 0);
+    lv_obj_set_width(text, kScreenWidth - (metric::kGutter * 2));
+    lv_label_set_long_mode(text, LV_LABEL_LONG_DOT);
+    lv_obj_align(text, LV_ALIGN_TOP_LEFT, metric::kGutter, 5);
+
+    if (deploy_state == 1) {
+        auto* keys = lv_label_create(band);
+        lv_label_set_text(keys, "Y deploy    N cancel");
+        lv_obj_set_style_text_font(keys, face(f_note), 0);
+        lv_obj_set_style_text_color(keys, p.text_secondary, 0);
+        lv_obj_align(keys, LV_ALIGN_TOP_LEFT, metric::kGutter, 19);
+    }
 }
 
 } // namespace screen
