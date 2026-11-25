@@ -154,3 +154,60 @@ mode. *Needs the device. Also the first arm64 boot this codebase has ever had.*
 4. The endpoint budget: the dwc2 note in `oled/client.go` says seven usable endpoints on a
    Pi Zero W. Is CM0 the same?
 5. Does the stock OS fight us for `/dev/fb0` — APPLaunch is a framebuffer app too.
+
+
+---
+
+# "Make everything work" — what that actually takes
+
+Added 2026-11-25, after the panel was named back to P4wnP1 A.L.O.A.
+
+The panel is not the product. The product is the whole of P4wnP1 running on a
+stock CardputerZero, and the panel is its face. Here is the honest state of
+each piece, so nothing reads as done that is not.
+
+## Done
+
+- **The panel builds and runs** at 320x170 in the macOS simulator, themed to
+  the house palette, with a contrast suite and an endpoint-budget suite that
+  both pass. Two screens: Status and Cable.
+- **The endpoint meter** is real arithmetic over P4wnP1's own cost table, not
+  a mock-up.
+
+## Doable now, with no hardware
+
+1. **The RPC client.** `oled/client.go` already speaks `POST
+   /api/v1/rpc/{method}` to the service on `:8000`. The panel needs the same
+   in C++. Verifiable without a device by standing up a fake server that
+   returns the same shapes and pointing the panel at it, which also pins the
+   shapes so the two cannot drift apart silently.
+2. **The Debian package.** Build it, read it back with `dpkg-deb -c`, and
+   dry-run the maintainer scripts. This is Milestone 1 and it is the whole
+   "no SD swapping" claim.
+3. **Borrow-and-return networking.** `install.sh:404` disables NetworkManager,
+   which the CardputerZero's own LaunchWizard and Settings need. The panel
+   must stop it on *arming* and restore it on *disarm*, with a guaranteed
+   restore on crash, cancel and uninstall. The decision logic is pure and can
+   be tested on a host; only the effect needs a device.
+
+## Needs the device, and cannot be faked
+
+4. **dwc2 in device mode.** Confirmed available on the stock image
+   (`section-add all dtoverlay dwc2`, no `dr_mode`, so OTG). Not confirmed to
+   work, and there is a physical Host/Slave switch whose software visibility
+   is unknown.
+5. **The first arm64 boot this codebase has ever had.** `RESUME.md` says the
+   arm64 images have never been booted. The CardputerZero would be that boot.
+6. **The endpoint budget.** 7 is the Pi Zero W figure. The CM0 may differ, and
+   the panel currently says 7 as an assumption, not a measurement.
+7. **What gadget mode costs.** One USB controller: USB-A and wired Ethernet
+   are expected to drop while Wi-Fi survives. Expected, not measured.
+8. **HID into a real host.** Twelve of the fifteen payloads have never run
+   against one, per `RESUME.md`.
+
+## The honest summary
+
+Everything in "done" and "doable now" can be finished before the device
+arrives, and that is most of the software. Items 4-8 are not slow, they are
+simply not knowable from here, and writing code that assumes an answer to them
+is how a project ends up with a confident UI over an untested device.
