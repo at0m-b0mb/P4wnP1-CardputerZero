@@ -8,6 +8,7 @@
 
 #include "asset_manager.h"
 #include "bindings.h"
+#include "redact.h"
 #include "rpc_client.h"
 #include "theme.h"
 #include "ui_const.h"
@@ -204,7 +205,7 @@ void PayloadsScreen::render() {
         }
 
         auto* name = lv_label_create(content_);
-        lv_label_set_text(name, g_payloads[static_cast<std::size_t>(index)].c_str());
+        lv_label_set_text(name, service::display_name(g_payloads[static_cast<std::size_t>(index)], index).c_str());
         lv_obj_set_style_text_font(name, here ? face(f_value) : face(f_label), 0);
         lv_obj_set_style_text_color(name, here ? p.text : p.text_secondary, 0);
         lv_obj_set_width(name, kScreenWidth - (metric::kGutter * 2) - 10);

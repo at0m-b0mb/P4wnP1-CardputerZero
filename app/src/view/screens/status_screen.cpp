@@ -8,6 +8,7 @@
 
 #include "asset_manager.h"
 #include "bindings.h"
+#include "redact.h"
 #include "rpc_client.h"
 #include "theme.h"
 #include "ui_const.h"
@@ -211,14 +212,19 @@ void StatusScreen::render() {
     };
 
     char buf[64];
+    // Redaction is display-time only: the snapshot still holds the real
+    // values and everything else still acts on them. On real hardware these
+    // three fields are the operator's own network, and the store requires
+    // screenshots.
     const std::string usb = service::usb_summary(g_snapshot);
-    const std::string usbeth = service::interface_ip(g_snapshot, "usbeth");
-    const std::string wlan = service::interface_ip(g_snapshot, "wlan0");
+    const std::string usbeth = service::display_ip(service::interface_ip(g_snapshot, "usbeth"));
+    const std::string wlan = service::display_ip(service::interface_ip(g_snapshot, "wlan0"));
+    const std::string wifi = service::display_wifi(g_snapshot.wifi);
 
     row("USB", g_snapshot.usb_ok ? usb.c_str() : "unknown", g_snapshot.usb_composed);
     row("usbeth", usbeth.empty() ? "none" : usbeth.c_str(), !usbeth.empty());
     row("wlan0", wlan.empty() ? "none" : wlan.c_str(), !wlan.empty());
-    row("Wi-Fi", g_snapshot.wifi_ok ? g_snapshot.wifi.c_str() : "unavailable", g_snapshot.wifi_ok);
+    row("Wi-Fi", g_snapshot.wifi_ok ? wifi.c_str() : "unavailable", g_snapshot.wifi_ok);
 
     if (g_snapshot.reflexes_ok) {
         std::snprintf(buf, sizeof(buf), "%d of %d armed",

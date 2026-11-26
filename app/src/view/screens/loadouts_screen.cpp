@@ -8,6 +8,7 @@
 
 #include "asset_manager.h"
 #include "bindings.h"
+#include "redact.h"
 #include "rpc_client.h"
 #include "theme.h"
 #include "ui_const.h"
@@ -228,7 +229,9 @@ void LoadoutsScreen::render() {
                                                   : nullptr;
         std::string owned;
         if (!boot_text) {
-            owned = "boot: " + g_startup;
+            // The startup loadout is named by the operator as well.
+            owned = "boot: " + (service::redaction_enabled() ? std::string("<loadout>")
+                                                             : g_startup);
             boot_text = owned.c_str();
         }
         auto* b = lv_label_create(content_);
@@ -277,7 +280,7 @@ void LoadoutsScreen::render() {
         }
 
         auto* label = lv_label_create(content_);
-        lv_label_set_text(label, name.c_str());
+        lv_label_set_text(label, service::display_name(name, index).c_str());
         lv_obj_set_style_text_font(label, here ? face(f_value) : face(f_label), 0);
         lv_obj_set_style_text_color(label, here ? p.text : p.text_secondary, 0);
         lv_obj_set_width(label, kScreenWidth - (metric::kGutter * 2) - 46);

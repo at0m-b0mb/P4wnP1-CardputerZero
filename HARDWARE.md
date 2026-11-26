@@ -28,7 +28,7 @@ custody logic assumes a reboot restores it, and that is only true while it is en
 ## 1. Install
 
 ```bash
-sudo apt install ./P4wnP1_0.4.0_rev1_arm64.deb
+sudo apt install ./P4wnP1_0.5.0_rev1_arm64.deb
 p4wnp1_panel --version
 ```
 
@@ -185,6 +185,49 @@ from its shipped systemd unit (which has no `User=`, so it runs as root) instead
 APPLaunch. Record which you chose.
 
 ---
+
+## 6b. Before any screenshot leaves the device
+
+**The Status screen shows your own network.** `wlan0`'s address and the Wi-Fi SSID are real
+once this runs on hardware, and the CardputerZero store *requires* screenshots — so the one
+moment you most want a picture of the panel is the moment it is displaying something that
+should not be published.
+
+Capture with redaction on:
+
+```bash
+P4WNP1_REDACT=1 p4wnp1_panel
+```
+
+Addresses become `172.16.x.x`, the SSID becomes `<ssid>`, and anything you named yourself —
+loadouts, payloads, job titles — becomes `item 1`, `item 2`. The shape survives, so the
+screenshot still documents the panel; the identity does not. It is display-only: the panel
+still knows the real values and still acts on them.
+
+Then check the repo before pushing anything:
+
+```bash
+./scan-privacy.sh
+```
+
+It reads the working tree, **the whole git history**, commit identities and any built `.deb`,
+and prints how many bytes it read — a scan that silently matched nothing and a scan that read
+nothing look identical otherwise.
+
+### What not to paste
+
+Terminal output from the steps above is the likeliest leak, because it is the most useful
+thing to quote in an issue. Before pasting any of it anywhere public, strip:
+
+| from | what it reveals |
+|---|---|
+| `ip link` / `ip addr` | MAC addresses, your addressing |
+| `nmcli dev status` / `iwconfig` | your SSID |
+| `hostnamectl` / the shell prompt | your hostname, your username |
+| `lsusb -v` | serial numbers of your own devices |
+| `journalctl` | all of the above, mixed with everything else |
+
+Quote the one line that shows the problem, not the whole command.
 
 ## 7. For the store
 

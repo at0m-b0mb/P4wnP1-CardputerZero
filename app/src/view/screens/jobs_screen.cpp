@@ -9,6 +9,7 @@
 #include "asset_manager.h"
 #include "bindings.h"
 #include "freshness.h"
+#include "redact.h"
 #include "rpc_client.h"
 #include "theme.h"
 #include "ui_const.h"
@@ -267,7 +268,8 @@ void JobsScreen::render() {
         // stays the id alone and says so, rather than showing a filename the
         // service never told us.
         auto* name = lv_label_create(content_);
-        lv_label_set_text(name, job.label.empty() ? "source has no title" : job.label.c_str());
+        const std::string shown = service::display_name(job.label, row);
+        lv_label_set_text(name, job.label.empty() ? "source has no title" : shown.c_str());
         lv_obj_set_style_text_font(name, face(f_label), 0);
         lv_obj_set_style_text_color(name, job.label.empty() ? p.text_disabled
                                                             : p.text_secondary, 0);

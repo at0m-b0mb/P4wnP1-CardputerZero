@@ -14,6 +14,10 @@ run() { printf '\n=== %s ===\n' "$1"; shift; "$@" || fail=1; }
 clang++ -std=c++17 -Wall -Wextra tests/test_contrast.cpp -o "$OUT/contrast"
 run "theme contrast"  "$OUT/contrast"
 
+clang++ -std=c++17 -Wall -Wextra \
+  src/service/redact.cpp tests/test_redact.cpp -o "$OUT/redact"
+run "screenshot redaction" "$OUT/redact"
+
 clang++ -std=c++17 -Wall -Wextra tests/test_gadget_budget.cpp -o "$OUT/budget"
 run "endpoint budget" "$OUT/budget"
 

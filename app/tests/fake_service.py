@@ -44,7 +44,7 @@ REPLIES = {
             {"name": "wlan0", "ipAddress4": "172.24.0.1", "mode": "ap"},
         ]
     },
-    "GetWiFiState": {"mode": "AP", "ssid": "P4wnP1"},
+    "GetWiFiState": {"mode": "AP", "ssid": "P4wnP1"},  # a real device shows the operator's own SSID here
     "GetDeployedTriggerActionSet": {
         "TriggerActions": [{"isActive": True}, {"isActive": True}, {"isActive": False}]
     },

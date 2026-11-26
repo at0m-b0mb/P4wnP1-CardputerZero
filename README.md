@@ -10,7 +10,7 @@
   <a href="LICENSE"><img alt="Licence" src="https://img.shields.io/badge/licence-GPL--3.0--only-8A6A1F"></a>
   <img alt="Target" src="https://img.shields.io/badge/target-CardputerZero%20%C2%B7%20aarch64-1A1713">
   <img alt="Package" src="https://img.shields.io/badge/package-p4wnp1--panel.deb-1A1713">
-  <img alt="Tests" src="https://img.shields.io/badge/host%20suites-8%20passing-2E6F4E">
+  <img alt="Tests" src="https://img.shields.io/badge/host%20suites-9%20passing-2E6F4E">
   <img alt="Hardware" src="https://img.shields.io/badge/on%20hardware-not%20yet%20verified-9B2C2C">
 </p>
 
@@ -26,7 +26,7 @@ device's own Wi-Fi settings keep working.
 Take the package from [the latest release](https://github.com/at0m-b0mb/P4wnP1-CardputerZero/releases/latest):
 
 ```bash
-sudo apt install ./P4wnP1_0.4.0_rev1_arm64.deb
+sudo apt install ./P4wnP1_0.5.0_rev1_arm64.deb
 ```
 
 It appears in APPLaunch as **P4wnP1**. `apt remove` leaves the device as it was found; `apt
@@ -150,6 +150,24 @@ p4wnp1_panel --netcheck          # what it would do right now
 p4wnp1_panel --netcheck-armed    # ...as if a network gadget were deployed
 ```
 
+## Your network stays yours
+
+The Status screen shows `wlan0`'s address and the Wi-Fi SSID. In the simulator those come
+from a fake service. On real hardware they are **your** network — and the store requires
+screenshots, so the moment you most want a picture of the panel is the moment it is showing
+something that should not be published.
+
+```bash
+P4WNP1_REDACT=1 p4wnp1_panel     # capture safely
+./scan-privacy.sh                # check before pushing
+```
+
+Redaction is display-only and keeps the shape: `172.16.x.x`, `AP <ssid>`, `item 1`. The
+panel still knows the real values and still acts on them. `scan-privacy.sh` reads the working
+tree, **the whole git history**, the commit identities and any built `.deb`, and reports the
+byte count it read, because a scan that matched nothing and a scan that read nothing look the
+same otherwise.
+
 ## Not yet verified on hardware
 
 The CardputerZero has not arrived. These are reasoned from the sources and are **not**
@@ -172,7 +190,7 @@ what cannot.
 ## Building
 
 ```bash
-./run-tests.sh      # eight host suites, none needing hardware
+./run-tests.sh      # nine host suites, none needing hardware
 ./build-deb.sh      # the arm64 .deb, built natively in a Debian container
 ./test-install.sh   # install it, inspect it, remove it, purge it
 ```
@@ -180,6 +198,7 @@ what cannot.
 | suite | what it pins |
 |---|---|
 | `test_contrast` | every text pairing against WCAG AA, in both themes |
+| `test_redact` | that a published screenshot cannot carry your SSID or addresses |
 | `test_gadget_budget` | the endpoint arithmetic and cursor behaviour |
 | `test_network_custody` | the borrow-and-return decision, over every input |
 | `test_custody_runtime` | that it survives a refused stop, a failed restore and no systemd at all |
