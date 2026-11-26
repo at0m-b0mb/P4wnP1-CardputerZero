@@ -26,7 +26,7 @@ device's own Wi-Fi settings keep working.
 Take the package from [the latest release](https://github.com/at0m-b0mb/P4wnP1-CardputerZero/releases/latest):
 
 ```bash
-sudo apt install ./P4wnP1_0.3.0_rev1_arm64.deb
+sudo apt install ./P4wnP1_0.3.1_rev1_arm64.deb
 ```
 
 It appears in APPLaunch as **P4wnP1**. `apt remove` leaves the device as it was found; `apt
@@ -104,16 +104,29 @@ accepted what was typed into it**, and it does not pretend to.
 - A service that is down and a service that refuses are distinguished, because they call for
   different actions.
 
-## Networking is borrowed, not seized
+## Networking: what is true today
 
 P4wnP1's `install.sh` disables NetworkManager outright, which on a CardputerZero breaks
-LaunchWizard and Settings — both depend on it. So the panel stops it when a network mode is
-**armed** and restores it on **disarm**, never at install time.
+LaunchWizard and Settings — both depend on it.
 
-The property that matters is not "disarm restores it". It is that it is restored even when
-disarm never happens: a crash, a kill, a power cut, or the package removed while armed.
-Custody is recorded on disk *before* NetworkManager is stopped and cleared only *after* it is
-running again, and the same reconciliation runs on startup, arm, disarm and removal.
+**This package never touches NetworkManager.** No file in it mentions NetworkManager, it
+ships no maintainer scripts, and the panel has no "arm a network mode" feature yet — so
+nothing here has cause to take networking away, and installing or removing it leaves the
+device's own networking exactly as it was. That is the whole of the current guarantee, and
+it holds because of what the package *does not* do rather than because of anything it
+manages.
+
+`src/service/network_custody.{h,cpp}` holds the borrow-and-return decision logic for when
+arming does land, and `tests/test_network_custody.cpp` pins it: custody is recorded on disk
+*before* NetworkManager would be stopped and cleared only *after* it is running again, so it
+is handed back even when disarm never happens — a crash, a kill, a power cut, or the package
+removed while armed.
+
+**That module is not wired to anything yet.** Its only caller is its own test. Earlier
+versions of this README said the reconciliation "runs on startup, arm, disarm and removal";
+it runs in none of those places, because none of them exist yet. The design is settled and
+tested ahead of the feature, which is the right order — but it is a plan, not a running
+safeguard, and this file said otherwise.
 
 ## Not yet verified on hardware
 

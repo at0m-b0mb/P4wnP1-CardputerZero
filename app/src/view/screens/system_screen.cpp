@@ -251,7 +251,11 @@ void SystemScreen::render() {
         // this ran its second line straight through the "Shut down" row: the
         // content area is 110px and the rows already reach 82.
         auto* note = lv_label_create(content_);
-        lv_label_set_text(note, "Networking is borrowed, not taken.");
+        // Was "Networking is borrowed, not taken." -- which describes a
+        // mechanism that is written and tested but wired to nothing. What is
+        // actually true, and is the reassurance that matters, is that this
+        // app never disables NetworkManager the way P4wnP1's installer does.
+        lv_label_set_text(note, "This app never disables NetworkManager.");
         lv_obj_set_style_text_font(note, face(f_note), 0);
         lv_obj_set_style_text_color(note, p.text_disabled, 0);
         lv_obj_set_width(note, kScreenWidth - (metric::kGutter * 2));
