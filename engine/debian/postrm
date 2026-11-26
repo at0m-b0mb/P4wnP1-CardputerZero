@@ -1,0 +1,49 @@
+#!/bin/sh
+# Remove leaves the operator's work. Purge is the one that takes it.
+#
+# The split matters and is the reason the live tree is /var/lib/p4wnp1 rather
+# than a directory inside the package: `apt remove` can take P4wnP1 off the
+# device and leave every template, loadout, payload and mass-storage image
+# where it was, so reinstalling returns you to your own setup. Only an explicit
+# `apt purge` erases it, which is what purge means.
+set -e
+
+LIVE=/var/lib/p4wnp1
+LINK=/usr/local/P4wnP1
+
+case "$1" in
+  remove)
+    # The symlink is ours, so it goes; what it points at is not, so it stays.
+    [ -L "$LINK" ] && rm -f -- "$LINK"
+    if [ -d /run/systemd/system ]; then
+        systemctl daemon-reload || true
+    fi
+    echo "p4wnp1-aloa: removed. Your templates, payloads and images are still in $LIVE."
+    echo "             'apt purge p4wnp1-aloa' deletes those too."
+    ;;
+
+  purge)
+    [ -L "$LINK" ] && rm -f -- "$LINK"
+
+    # Deliberately explicit paths rather than a loop over a variable. A postrm
+    # running `rm -rf` on an unset variable is the classic way a package
+    # deletes a root filesystem, and this one runs as root on someone else's
+    # device.
+    if [ -n "$LIVE" ] && [ "$LIVE" = "/var/lib/p4wnp1" ] && [ -d "$LIVE" ]; then
+        rm -rf -- /var/lib/p4wnp1
+    fi
+    rm -f -- /etc/p4wnp1/initial.conf
+    # Only if empty: an operator may keep other things in here.
+    rmdir /etc/p4wnp1 2>/dev/null || true
+
+    if [ -d /run/systemd/system ]; then
+        systemctl daemon-reload || true
+    fi
+    echo "p4wnp1-aloa: purged."
+    ;;
+
+  upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+    ;;
+esac
+
+exit 0

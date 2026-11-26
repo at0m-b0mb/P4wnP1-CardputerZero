@@ -12,7 +12,13 @@ device is.
 
 I went in expecting to port P4wnP1 A.L.O.A. and that is the wrong frame. Porting the *image*
 is exactly the SD-card swapping we are trying to escape. And `at0m-b0mb/P4wnP1_aloa` is
-already **v0.9.0 with 160 of your commits** — the hard parts exist:
+already **v0.8.0 released, with 161 of your commits and 11 more sitting past the tag** —
+the hard parts exist:
+
+> Corrected 2026-11-26: this paragraph said "already v0.9.0". There is no v0.9.0 — not a
+> tag, not a release. The latest tag and the latest published release are both v0.8.0, and
+> the version the plan leaned on does not exist. The code it refers to is real; the release
+> is not, and a plan that assumes a published arm64 v0.9.0 is assuming its own foundation.
 
 | already done | where |
 |---|---|

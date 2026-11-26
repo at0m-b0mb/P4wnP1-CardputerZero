@@ -1,0 +1,130 @@
+#!/bin/sh
+# Seed the live tree, generate credentials, enable the units.
+#
+# THE ONE THING THIS DELIBERATELY DOES NOT DO
+#
+# upstream install.sh:398-408 runs `systemctl disable` on NetworkManager and
+# networking at install time. On the CardputerZero that breaks the device's own
+# LaunchWizard and Settings pages -- and it is the same shape as this project's
+# most expensive recorded bug, where adding auth to the API broke the device's
+# own boot scripts. Networking is BORROWED when a mode is armed and handed back
+# on disarm, by the panel, never seized by an installer.
+#
+# So this script changes no network service state at all. If you are looking
+# for where NetworkManager gets stopped: it is not here, and that is the point.
+set -e
+
+PAYLOAD=/usr/share/p4wnp1-aloa/payload
+LIVE=/var/lib/p4wnp1
+LINK=/usr/local/P4wnP1
+
+case "$1" in
+  configure)
+
+    # --- the live tree ----------------------------------------------------
+    #
+    # /usr/local/P4wnP1 is a SYMLINK to /var/lib/p4wnp1. Every hardcoded path
+    # in the engine (PATH_ROOT in common/globals.go, both units, the
+    # healthcheck and firstboot scripts) keeps resolving, while the state that
+    # is actually the operator's lives where Debian puts state and survives
+    # removal.
+    mkdir -p "$LIVE"
+    chmod 0755 "$LIVE"
+
+    if [ -e "$LINK" ] && [ ! -L "$LINK" ]; then
+        # A real directory here means a previous install.sh run, with the
+        # operator's templates and images inside it. Moving it would be a
+        # surprise and deleting it would be worse, so stop and say so.
+        echo "p4wnp1-aloa: $LINK exists and is a real directory, not a symlink." >&2
+        echo "  It looks like install.sh was used here. This package expects to" >&2
+        echo "  own that path as a link to $LIVE. Move your data across and" >&2
+        echo "  remove the directory, then run: dpkg --configure p4wnp1-aloa" >&2
+        exit 1
+    fi
+    [ -L "$LINK" ] || ln -s "$LIVE" "$LINK"
+
+    # Shipped content is REPLACED; anything the operator may have authored is
+    # MERGED so their own files survive. Same rule as p4wnp1-update, because an
+    # upgrade that eats your payloads is an upgrade nobody runs twice.
+    for d in keymaps www helper legacy; do
+        if [ -d "$PAYLOAD/$d" ]; then
+            rm -rf -- "$LIVE/$d"
+            cp -a "$PAYLOAD/$d" "$LIVE/$d"
+        fi
+    done
+    for d in scripts HIDScripts; do
+        if [ -d "$PAYLOAD/$d" ]; then
+            mkdir -p "$LIVE/$d"
+            cp -a "$PAYLOAD/$d/." "$LIVE/$d/"
+        fi
+    done
+    [ -d "$LIVE/scripts" ] && chmod 0755 "$LIVE"/scripts/*.sh 2>/dev/null || true
+
+    # The factory template database is seeded ONCE. store/ is the operator's
+    # live datastore and is never touched here -- restoring it is the
+    # datastore's own job, and doing it from a package postinst is how you
+    # erase someone's loadouts during an upgrade.
+    if [ -f "$PAYLOAD/db/init.db" ]; then
+        mkdir -p "$LIVE/db"
+        [ -f "$LIVE/db/init.db" ] || cp -a "$PAYLOAD/db/init.db" "$LIVE/db/init.db"
+    fi
+
+    mkdir -p "$LIVE/ums"
+    [ -f "$PAYLOAD/VERSION" ] && cp -a "$PAYLOAD/VERSION" "$LIVE/VERSION"
+    [ -d "$LIVE/www" ] && [ -f "$PAYLOAD/VERSION" ] && cp -a "$PAYLOAD/VERSION" "$LIVE/www/VERSION"
+
+    # --- per-device credentials ------------------------------------------
+    #
+    # NEVER a shared default. Every image this project shipped before v0.3.1
+    # carried p4wnp1:p4wnp1 with NOPASSWD sudo, and the defence written at the
+    # time -- that `chage -d 0` forces a change at first login -- was wrong:
+    # expiring a password stops it PERSISTING, not being USED once, and the
+    # attacker is the one who answers the prompt.
+    mkdir -p /etc/p4wnp1
+    chmod 0755 /etc/p4wnp1
+    if [ ! -f /etc/p4wnp1/initial.conf ]; then
+        SSID="P4wnP1-$(tr -dc 'A-Z0-9' < /dev/urandom | head -c 4)"
+        PSK="$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 20)"
+        umask 077
+        cat > /etc/p4wnp1/initial.conf <<CONF
+# Read by $LINK/scripts/firstboot-secure-defaults.sh on first boot.
+# Edit before first boot to customise; delete $LIVE/firstboot.done to force
+# the helper to re-run.
+#
+# Values are shell-quoted. If you edit them by hand, keep them quoted --
+# this file is sourced by the firstboot helper, as root. An unquoted
+# apostrophe aborted first boot on this project once, leaving a device with
+# no admin account at all.
+P4WNP1_INITIAL_SSID='$SSID'
+P4WNP1_INITIAL_PSK='$PSK'
+CONF
+        chmod 0600 /etc/p4wnp1/initial.conf
+        umask 022
+        echo "p4wnp1-aloa: generated per-device WiFi credentials in /etc/p4wnp1/initial.conf (0600)."
+        echo "             SSID $SSID -- read the file as root for the passphrase."
+    else
+        echo "p4wnp1-aloa: /etc/p4wnp1/initial.conf already exists; leaving it alone."
+    fi
+
+    # --- units ------------------------------------------------------------
+    #
+    # Enabled, not started. The USB gadget needs dtoverlay=dwc2 and a reboot
+    # to have a UDC to bind to; starting the service now would have it come up
+    # with no gadget and report failures that mean nothing.
+    if [ -d /run/systemd/system ]; then
+        systemctl daemon-reload || true
+        systemctl enable P4wnP1.service >/dev/null 2>&1 || true
+        [ -f /usr/lib/systemd/system/p4wnp1-firstboot.service ] && \
+            systemctl enable p4wnp1-firstboot.service >/dev/null 2>&1 || true
+    fi
+
+    echo "p4wnp1-aloa: installed. NetworkManager was NOT disabled -- this package"
+    echo "             borrows networking only while a mode is armed."
+    echo "             USB gadget mode needs 'dtoverlay=dwc2' in config.txt and a reboot."
+    ;;
+
+  abort-upgrade|abort-remove|abort-deconfigure)
+    ;;
+esac
+
+exit 0

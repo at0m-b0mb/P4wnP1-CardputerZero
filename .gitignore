@@ -5,3 +5,6 @@ app/.cache/
 # the simulator writes captures to ~/Pictures/Screenshots; only curated ones
 # belong in the repo, and they live in app/screenshot/
 app/dist/
+
+# the engine .deb is a build artifact, like app/dist
+engine/dist/

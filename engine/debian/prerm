@@ -1,0 +1,36 @@
+#!/bin/sh
+# Stop the service, and hand networking back before the binaries go away.
+#
+# The removal must leave the device as it was found. That is the entire claim
+# this packaging makes over upstream's install.sh, so it has to hold on the way
+# out as well as the way in -- including when the operator removes the package
+# while a mode is still armed.
+set -e
+
+case "$1" in
+  remove|deconfigure|upgrade)
+
+    if [ -d /run/systemd/system ]; then
+        systemctl stop P4wnP1.service >/dev/null 2>&1 || true
+        if [ "$1" = "remove" ] || [ "$1" = "deconfigure" ]; then
+            systemctl disable P4wnP1.service >/dev/null 2>&1 || true
+            systemctl disable p4wnp1-firstboot.service >/dev/null 2>&1 || true
+        fi
+    fi
+
+    # If the panel borrowed NetworkManager and nobody disarmed it, put it back.
+    # The panel's own prerm does this too, but the two packages can be removed
+    # in either order and whichever goes first must not leave the device
+    # without networking. Doing it twice is harmless; doing it never is not.
+    if [ -x /usr/bin/p4wnp1_panel ]; then
+        /usr/bin/p4wnp1_panel --restore-networking || true
+    elif [ -f /run/p4wnp1-panel/networkmanager-borrowed ]; then
+        # The panel is already gone and the marker is still here, so start
+        # NetworkManager directly. We only ever STOP it, never disable it, so
+        # starting it is enough to undo what was done.
+        systemctl start NetworkManager >/dev/null 2>&1 || true
+    fi
+    ;;
+esac
+
+exit 0
