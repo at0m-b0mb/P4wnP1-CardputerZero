@@ -21,6 +21,23 @@ an M5Stack CardputerZero, packaged as an ordinary Debian package.
 installs onto the stock CardputerZero OS, it removes cleanly, and while it is not in use the
 device's own Wi-Fi settings keep working.
 
+## See it running
+
+<p align="center">
+  <img src="images/tour.gif" alt="A tour of all six screens" width="100%">
+</p>
+
+Every frame is a real 320×170 framebuffer, scaled by an integer factor. Drive it yourself:
+
+```bash
+./demo.sh            # the panel against a stand-in service
+./demo.sh --dark
+./demo.sh --redact   # as you would capture it for publishing
+```
+
+`demo.sh` starts `tests/fake_service.py`, points the panel at it, and tears it down on exit —
+so there is something on screen other than *No service*.
+
 ## Install
 
 Take the package from [the latest release](https://github.com/at0m-b0mb/P4wnP1-CardputerZero/releases/latest):
