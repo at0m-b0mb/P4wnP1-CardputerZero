@@ -186,7 +186,11 @@ its root is a valid sysroot and `-DCM0_SDK_ROOT=/` satisfies the CM0 branch of t
 ./check-store-manifest.py   # the store's policy, checked before anything uploads
 ```
 
-The manifest passes. **The first release still cannot be submitted**: per
+The manifest passes, and the package passes the store's own `install_path_policy.py` with
+zero rejected paths — [STORE.md](STORE.md) records every check, with the workflow lines that
+enforce them.
+
+**The first release still cannot be submitted**: per
 [AppBuilder's policy](https://github.com/CardputerZero/AppBuilder/blob/main/docs/APP_BUILDER_JSON.md),
 a new app is not auto-merged — a short video of it running *on a real device* has to be
 posted in the packages PR before a maintainer merges it. Version updates merge on validation
