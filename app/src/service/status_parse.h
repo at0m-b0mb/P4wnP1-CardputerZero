@@ -69,6 +69,16 @@ bool parse_running_jobs(const std::string& json, StatusSnapshot& out);
 // Shared so the parser and the deploy cannot disagree about what exists.
 const std::vector<std::pair<std::string, std::string>>& usb_toggle_table();
 
+// Does this composition make P4wnP1 want the network stack?
+//
+// RNDIS and CDC ECM are the two functions that bring up `usbeth`, which
+// P4wnP1 then runs a DHCP server on. That is the one thing NetworkManager
+// fights it for, and so it is the only thing that justifies stopping
+// NetworkManager. A keyboard-only gadget does not: the panel must not take
+// networking away from a device that is merely pretending to be a keyboard.
+bool carries_network(const std::vector<std::string>& enabled_keys);
+bool carries_network(const StatusSnapshot& snapshot);
+
 // The label shown for a composed gadget, e.g. "Keyboard, RNDIS net".
 std::string usb_summary(const StatusSnapshot& snapshot);
 

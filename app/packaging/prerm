@@ -1,0 +1,26 @@
+#!/bin/sh
+# Hand networking back before the binary goes away.
+#
+# This is the "removed while armed" case. If the panel stopped
+# NetworkManager and the package is removed before anyone disarms it, nothing
+# else would ever put it back -- the marker would sit in /run until the next
+# reboot with no program left that knows what it means.
+#
+# It runs in prerm rather than postrm because it needs /usr/bin/p4wnp1_panel,
+# which postrm may no longer have.
+set -e
+
+case "$1" in
+    remove|deconfigure|upgrade)
+        if [ -x /usr/bin/p4wnp1_panel ]; then
+            # Never fail the removal over this. A package that cannot be
+            # removed is a worse problem than a service left stopped, and the
+            # next reboot starts NetworkManager anyway -- we only ever stop
+            # it, never disable it.
+            /usr/bin/p4wnp1_panel --restore-networking || true
+        fi
+        ;;
+esac
+
+#DEBHELPER#
+exit 0

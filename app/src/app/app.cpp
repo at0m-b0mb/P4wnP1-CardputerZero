@@ -6,6 +6,8 @@
 
 #include "app.h"
 
+#include "network_custody_runtime.h"
+
 #include "application_config.h"
 #include "asset_manager.h"
 #include "help_popup.h"
@@ -593,6 +595,35 @@ int Application::run() {
     auto* quit_observer = lv_subject_add_observer(view_model.quit_requested_subject(),
                                                   quit_requested_observer,
                                                   &running);
+
+    // Startup reconciliation: the crash-recovery half of the promise.
+    //
+    // If a previous run stopped NetworkManager and never got to put it back
+    // -- killed, crashed, or the device yanked -- the marker is still on disk
+    // and this is where the debt is settled. It runs before the UI so a
+    // device that came up with no networking gets it back whether or not
+    // anyone is looking at the screen.
+    //
+    // want_armed is false here on purpose. We cannot yet know whether a
+    // network gadget is deployed, and the fail-safe direction is to hand
+    // networking BACK: a panel that wrongly keeps it is a device the operator
+    // cannot reach, while a panel that wrongly returns it merely re-arms on
+    // the next deploy. "Borrowed, not seized" has to mean the error falls
+    // that way.
+    {
+        const auto custody = service::netcustody::reconcile_now(
+            service::netcustody::system_effects(), /*want_armed=*/false);
+        if (!custody.ok) {
+            // Not fatal. The panel is still worth running, and most of what
+            // it does has nothing to do with networking.
+            LOG_WARN("networking custody: {}", custody.error);
+        }
+        else if (custody.changed) {
+            for (const auto& step : custody.did) {
+                LOG_INFO("networking custody: {}", step);
+            }
+        }
+    }
 
     LOG_INFO("LVGL app started at {}x{}", lv_display_get_horizontal_resolution(display),
              lv_display_get_vertical_resolution(display));

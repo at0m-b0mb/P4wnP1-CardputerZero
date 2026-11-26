@@ -1,0 +1,18 @@
+#!/bin/sh
+# Last resort: the binary is gone, so clear the marker by hand.
+#
+# prerm already asked the panel to hand networking back. If that failed, or
+# if prerm never ran, the marker would be left behind pointing at a program
+# that no longer exists. Removing it is safe: we only ever STOP
+# NetworkManager, never disable it, so a reboot starts it again regardless.
+set -e
+
+case "$1" in
+    remove|purge)
+        rm -f /run/p4wnp1-panel/networkmanager-borrowed
+        rmdir /run/p4wnp1-panel 2>/dev/null || true
+        ;;
+esac
+
+#DEBHELPER#
+exit 0

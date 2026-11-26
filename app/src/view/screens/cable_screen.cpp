@@ -8,6 +8,7 @@
 
 #include "asset_manager.h"
 #include "bindings.h"
+#include "network_custody_runtime.h"
 #include "rpc_client.h"
 #include "theme.h"
 #include "ui_const.h"
@@ -53,6 +54,8 @@ std::string token_path() {
 
 // Held across a re-render so the result of the last deploy can be shown.
 std::string g_last_error;
+// What custody did alongside the deploy, shown under the result.
+std::string g_custody_note;
 
 } // namespace
 
@@ -70,7 +73,44 @@ void deploy_selected(viewmodel::BaseViewModel& view_model) {
     client.set_timeout_ms(8000);  // configfs teardown and rebuild is not instant
     const service::DeployOutcome out = client.deploy_gadget(keys);
     g_last_error = out.error;
+
+    if (out.ok) {
+        // The deploy decided whether P4wnP1 now wants the network stack, so
+        // this is the moment networking is armed or handed back -- not
+        // install time, and not a separate switch the operator has to
+        // remember. A keyboard-only gadget gives it back.
+        //
+        // A custody failure does NOT fail the deploy: the gadget really is
+        // deployed, and saying otherwise would be the larger lie. It is
+        // reported alongside, because a device whose networking did not come
+        // back is something the operator has to know about.
+        const bool armed = service::carries_network(keys);
+        const service::netcustody::Outcome custody =
+            service::netcustody::reconcile_now(service::netcustody::system_effects(), armed);
+        g_custody_note.clear();
+        if (!custody.ok) {
+            g_custody_note = custody.needs_root
+                                 ? "Deployed, but NetworkManager needs root to pause."
+                                 : "Deployed. Networking untouched: " + custody.error;
+        }
+        else if (custody.changed) {
+            g_custody_note = armed ? "NetworkManager paused while this gadget is up."
+                                   : "NetworkManager running again.";
+        }
+    }
+
     view_model.set_deploy_state(out.ok ? 3 : 4);
+}
+
+bool selection_carries_network(const viewmodel::BaseViewModel& view_model) {
+    const int32_t mask = const_cast<viewmodel::BaseViewModel&>(view_model).gadget_mask();
+    std::vector<std::string> keys;
+    for (int i = 0; i < kGadgetRows; ++i) {
+        if (mask & (1 << i)) {
+            keys.emplace_back(kFunctions[static_cast<std::size_t>(i)].key);
+        }
+    }
+    return service::carries_network(keys);
 }
 
 bool selection_over_budget(const viewmodel::BaseViewModel& view_model) {
@@ -234,11 +274,21 @@ void CableScreen::render() {
         case 1:
             // The consequence is named, because re-enumeration is something
             // the attached host notices and the operator may not expect.
-            message = "Deploy? The host's USB link re-enumerates.";
+            // Naming the second consequence only when it applies. A
+            // keyboard-only gadget does not pause NetworkManager, and
+            // warning about it anyway would train the operator to ignore
+            // the line that matters.
+            message = selection_carries_network(view_model())
+                          ? "Deploy? USB re-enumerates and NetworkManager pauses."
+                          : "Deploy? The host's USB link re-enumerates.";
             tone = p.brass;
             break;
         case 2: message = "Deploying..."; tone = p.text_secondary; break;
-        case 3: message = "Deployed. The host sees the new gadget."; tone = p.success; break;
+        case 3:
+            message = g_custody_note.empty() ? "Deployed. The host sees the new gadget."
+                                             : g_custody_note.c_str();
+            tone = p.success;
+            break;
         case 4:
             message = g_last_error.empty() ? "The deploy was refused." : g_last_error.c_str();
             tone = p.error;

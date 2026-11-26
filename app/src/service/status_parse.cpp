@@ -161,6 +161,40 @@ const std::vector<std::pair<std::string, std::string>>& usb_toggle_table() {
     return table;
 }
 
+namespace {
+
+// Mirrors the two network functions in the toggle table. Named here rather
+// than inferred from the label, because a label is for people.
+bool is_network_key(const std::string& key) {
+    return key == "use_RNDIS" || key == "use_CDC_ECM";
+}
+
+} // namespace
+
+bool carries_network(const std::vector<std::string>& enabled_keys) {
+    for (const auto& key : enabled_keys) {
+        if (is_network_key(key)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool carries_network(const StatusSnapshot& snapshot) {
+    // snapshot.usb_functions holds LABELS ("RNDIS net"), not keys
+    // ("use_RNDIS"). Comparing it against keys silently matches nothing, so
+    // the labels are mapped back through the one shared table rather than
+    // spelled out a second time here.
+    for (const auto& label : snapshot.usb_functions) {
+        for (const auto& [key, text] : usb_toggle_table()) {
+            if (label == text && is_network_key(key)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 std::string usb_summary(const StatusSnapshot& snapshot) {
     if (!snapshot.usb_ok) {
         return "";

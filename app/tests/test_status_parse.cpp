@@ -118,6 +118,33 @@ int main() {
         check(s.jobs_ok && s.jobs_running == 0, "...answered, with zero running");
     }
 
+    std::printf("\n  which compositions want the network stack\n");
+    {
+        check(carries_network(std::vector<std::string>{"use_RNDIS"}), "RNDIS wants it");
+        check(carries_network(std::vector<std::string>{"use_CDC_ECM"}), "CDC ECM wants it");
+        check(!carries_network(std::vector<std::string>{"use_HID_KEYBOARD"}),
+              "a keyboard does NOT -- it must not cost the device its networking");
+        check(!carries_network(std::vector<std::string>{"use_UMS", "use_HID_RAW"}),
+              "nor do mass storage and raw HID");
+        check(carries_network(std::vector<std::string>{"use_HID_KEYBOARD", "use_RNDIS"}),
+              "a keyboard alongside RNDIS does");
+        check(!carries_network(std::vector<std::string>{}), "an empty composition does not");
+    }
+    {
+        // The snapshot carries LABELS, not keys. Comparing it against keys
+        // matches nothing and silently reports "never armed", so this pins
+        // the mapping rather than the spelling.
+        StatusSnapshot s1;
+        s1.usb_functions = {"Keyboard", "RNDIS net"};
+        check(carries_network(s1), "a snapshot naming RNDIS by its LABEL counts");
+        StatusSnapshot s2;
+        s2.usb_functions = {"Keyboard", "Mass storage"};
+        check(!carries_network(s2), "...and one without a network label does not");
+        StatusSnapshot s3;
+        s3.usb_functions = {"CDC ECM net"};
+        check(carries_network(s3), "...CDC ECM's label counts too");
+    }
+
     std::printf("\n%s\n", failures == 0 ? "ALL PARSE CHECKS PASS" : "PARSE FAILURES PRESENT");
     return failures == 0 ? 0 : 1;
 }

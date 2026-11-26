@@ -10,7 +10,7 @@
   <a href="LICENSE"><img alt="Licence" src="https://img.shields.io/badge/licence-GPL--3.0--only-8A6A1F"></a>
   <img alt="Target" src="https://img.shields.io/badge/target-CardputerZero%20%C2%B7%20aarch64-1A1713">
   <img alt="Package" src="https://img.shields.io/badge/package-p4wnp1--panel.deb-1A1713">
-  <img alt="Tests" src="https://img.shields.io/badge/host%20suites-7%20passing-2E6F4E">
+  <img alt="Tests" src="https://img.shields.io/badge/host%20suites-8%20passing-2E6F4E">
   <img alt="Hardware" src="https://img.shields.io/badge/on%20hardware-not%20yet%20verified-9B2C2C">
 </p>
 
@@ -26,7 +26,7 @@ device's own Wi-Fi settings keep working.
 Take the package from [the latest release](https://github.com/at0m-b0mb/P4wnP1-CardputerZero/releases/latest):
 
 ```bash
-sudo apt install ./P4wnP1_0.3.1_rev1_arm64.deb
+sudo apt install ./P4wnP1_0.4.0_rev1_arm64.deb
 ```
 
 It appears in APPLaunch as **P4wnP1**. `apt remove` leaves the device as it was found; `apt
@@ -104,29 +104,51 @@ accepted what was typed into it**, and it does not pretend to.
 - A service that is down and a service that refuses are distinguished, because they call for
   different actions.
 
-## Networking: what is true today
+## Networking is borrowed, not seized
 
-P4wnP1's `install.sh` disables NetworkManager outright, which on a CardputerZero breaks
-LaunchWizard and Settings — both depend on it.
+P4wnP1's `install.sh` runs `systemctl disable NetworkManager`. That is **persistent**: it
+survives a reboot, and the CardputerZero's LaunchWizard and Settings — both of which depend
+on NetworkManager — stay broken until someone re-enables it by hand.
 
-**This package never touches NetworkManager.** No file in it mentions NetworkManager, it
-ships no maintainer scripts, and the panel has no "arm a network mode" feature yet — so
-nothing here has cause to take networking away, and installing or removing it leaves the
-device's own networking exactly as it was. That is the whole of the current guarantee, and
-it holds because of what the package *does not* do rather than because of anything it
-manages.
+This panel only ever **stops** the service, which is runtime state. A reboot starts it again
+by itself, because it is still enabled. That one word is the whole safety argument.
 
-`src/service/network_custody.{h,cpp}` holds the borrow-and-return decision logic for when
-arming does land, and `tests/test_network_custody.cpp` pins it: custody is recorded on disk
-*before* NetworkManager would be stopped and cleared only *after* it is running again, so it
-is handed back even when disarm never happens — a crash, a kill, a power cut, or the package
-removed while armed.
+**When it happens.** Only a gadget carrying RNDIS or CDC ECM brings up `usbeth`, which
+P4wnP1 then runs a DHCP server on — that is the one thing NetworkManager fights it for. So
+networking is borrowed when you deploy such a gadget and handed back when you deploy one
+without. A keyboard-only gadget never costs the device its networking, and the confirm only
+mentions NetworkManager when the selection actually involves it.
 
-**That module is not wired to anything yet.** Its only caller is its own test. Earlier
-versions of this README said the reconciliation "runs on startup, arm, disarm and removal";
-it runs in none of those places, because none of them exist yet. The design is settled and
-tested ahead of the feature, which is the right order — but it is a plan, not a running
-safeguard, and this file said otherwise.
+**How it is always given back.** The property that matters is not "disarm restores it", but
+that it is restored even when disarm never happens:
+
+| it never happens because | what puts it back |
+|---|---|
+| you deployed a gadget with no network function | the deploy itself |
+| the panel crashed or was killed | the next startup reconciles before the UI is drawn |
+| the package was removed while borrowed | `prerm` asks the panel to hand it back; `postrm` clears the marker if that failed |
+| the power was cut | the reboot — a stop does not survive one |
+| everything else | `p4wnp1_panel --restore-networking` |
+
+Custody is recorded on disk *before* NetworkManager is stopped and cleared only *after* it is
+running again. The marker lives in `/run` deliberately: a stop does not survive a reboot, so
+neither should the record of it.
+
+**It refuses rather than guesses.** If the panel cannot tell whether NetworkManager is
+running — no systemd, no permission — it does nothing and says why. Treating "could not ask"
+as "not running" would have it record a borrow while taking nothing, which is the same class
+of false claim this file had to correct once already.
+
+**It may not be allowed to.** Stopping a unit needs privileges, and APPLaunch does not
+necessarily grant them. The panel then says *"Deployed, but NetworkManager needs root to
+pause"* — the deploy still succeeded, and custody failing does not fail it.
+
+See it decide without letting it act:
+
+```bash
+p4wnp1_panel --netcheck          # what it would do right now
+p4wnp1_panel --netcheck-armed    # ...as if a network gadget were deployed
+```
 
 ## Not yet verified on hardware
 
@@ -140,13 +162,17 @@ measured:
   because all three hang off one controller
 - the first arm64 boot this codebase has ever had
 
+[HARDWARE.md](HARDWARE.md) is the bring-up checklist for the day it arrives: ordered so that
+nothing destructive happens until a dry run has said what it would do, with the expected
+output at each step and a table to fill in that retires this section.
+
 [PLAN.md](PLAN.md) splits the remaining work into what can be finished without the device and
 what cannot.
 
 ## Building
 
 ```bash
-./run-tests.sh      # seven host suites, none needing hardware
+./run-tests.sh      # eight host suites, none needing hardware
 ./build-deb.sh      # the arm64 .deb, built natively in a Debian container
 ./test-install.sh   # install it, inspect it, remove it, purge it
 ```
@@ -155,7 +181,8 @@ what cannot.
 |---|---|
 | `test_contrast` | every text pairing against WCAG AA, in both themes |
 | `test_gadget_budget` | the endpoint arithmetic and cursor behaviour |
-| `test_network_custody` | that NetworkManager is always handed back |
+| `test_network_custody` | the borrow-and-return decision, over every input |
+| `test_custody_runtime` | that it survives a refused stop, a failed restore and no systemd at all |
 | `test_status_parse` | the service's reply shapes |
 | `test_freshness` | that a reading is never shown as current once it stops being so |
 | `test_catalog` | stored items and jobs, and that "none" never masquerades as "could not ask" |

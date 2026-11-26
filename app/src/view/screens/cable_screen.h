@@ -47,6 +47,10 @@ void deploy_selected(viewmodel::BaseViewModel& view_model);
 // Whether the selection exceeds the endpoint budget. Checked before the
 // confirm is even offered, so the operator is stopped by the panel with a
 // readable reason rather than by the service with an arithmetic one.
+// True when the current selection includes a function that brings up usbeth,
+// and so will pause NetworkManager on deploy.
+bool selection_carries_network(const viewmodel::BaseViewModel& view_model);
+
 bool selection_over_budget(const viewmodel::BaseViewModel& view_model);
 
 class CableScreen : public BaseScreen {

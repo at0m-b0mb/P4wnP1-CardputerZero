@@ -136,6 +136,21 @@ configure_file(
     "${APP_GENERATED_DIR}/conffiles"
     @ONLY
 )
-set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA "${APP_GENERATED_DIR}/conffiles")
+# Everything that goes in the control archive, set ONCE.
+#
+# CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA is a plain variable, so a second set()
+# silently replaces the first. Adding the maintainer scripts further up and
+# leaving this line as it was produced a package with neither of them and no
+# warning anywhere -- it built, it installed, and only reading the control
+# archive showed they were missing.
+#
+# prerm asks the panel to hand NetworkManager back while /usr/bin is still
+# populated; postrm clears the marker if that did not happen. Without them
+# the "restored even when disarm never happens" promise has no removal path,
+# which is the gap 0.3.1 had to correct in the README.
+set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA
+    "${APP_GENERATED_DIR}/conffiles"
+    "${CMAKE_CURRENT_SOURCE_DIR}/packaging/prerm"
+    "${CMAKE_CURRENT_SOURCE_DIR}/packaging/postrm")
 
 include(CPack)

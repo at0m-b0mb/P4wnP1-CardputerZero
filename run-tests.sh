@@ -21,6 +21,11 @@ clang++ -std=c++17 -Wall -Wextra \
   src/service/network_custody.cpp tests/test_network_custody.cpp -o "$OUT/custody"
 run "network custody" "$OUT/custody"
 
+clang++ -std=c++17 -Wall -Wextra \
+  src/service/network_custody.cpp src/service/network_custody_runtime.cpp \
+  tests/test_custody_runtime.cpp -o "$OUT/custodyrt"
+run "custody against a real machine" "$OUT/custodyrt"
+
 clang++ -std=c++17 -Wall -Wextra -I"$JSON" \
   src/service/status_parse.cpp tests/test_status_parse.cpp -o "$OUT/parse"
 run "status parsing"  "$OUT/parse"

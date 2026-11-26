@@ -6,7 +6,7 @@
 
 cmake_minimum_required(VERSION 3.31)
 
-project(p4wnp1_panel VERSION 0.3.1 LANGUAGES C CXX)
+project(p4wnp1_panel VERSION 0.4.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -664,6 +664,13 @@ endif()
 # ====================================================
 add_executable(${PROJECT_NAME}
     src/main.cpp
+)
+
+# main.cpp prints this for --version, from the same source as the screen and
+# the .deb, so the three cannot disagree about which build this is.
+target_compile_definitions(${PROJECT_NAME}
+    PRIVATE
+        P4WNP1_PANEL_VERSION="${PROJECT_VERSION}"
 )
 
 target_link_libraries(${PROJECT_NAME}

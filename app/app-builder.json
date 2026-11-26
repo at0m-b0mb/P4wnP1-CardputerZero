@@ -1,7 +1,7 @@
 {
   "app_name": "P4wnP1 A.L.O.A.",
   "package_name": "p4wnp1-panel",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "bin_name": "p4wnp1_panel",
   "description": "P4wnP1 A.L.O.A. on-device panel",
   "store": {
