@@ -14,6 +14,7 @@ the store requires 128-512, so a freshly scaffolded app fails this until the
 icon is replaced.
 """
 import json
+import pathlib
 import struct
 import sys
 from pathlib import Path
@@ -94,6 +95,29 @@ def main():
 
     check(set(store.get("permissions", {})) == PERMISSIONS,
           "exactly the seven permission booleans")
+
+    # The manifest version and the build version are written in two places
+    # and nothing made them agree, so they drifted: the manifest said 0.1.0
+    # while the package was 0.2.1. The store would have taken the manifest's
+    # word for it and published a version number that matched no artifact.
+    import re
+    cmake = pathlib.Path(__file__).parent / "app" / "CMakeLists.txt"
+    build_version = None
+    if cmake.exists():
+        m = re.search(r"project\(p4wnp1_panel\s+VERSION\s+([0-9.]+)", cmake.read_text())
+        if m:
+            build_version = m.group(1)
+    check(build_version is not None, "the build version can be read from CMakeLists.txt")
+    check(manifest.get("version") == build_version,
+          f"manifest version {manifest.get('version')!r} matches the build {build_version!r}")
+
+    # Every screenshot the manifest promises has to exist, or the listing
+    # ships with holes in it.
+    shots = store.get("screenshots", [])
+    check(len(shots) >= 1, f"{len(shots)} screenshots listed")
+    for rel in shots:
+        path = pathlib.Path(__file__).parent / "app" / rel
+        check(path.exists(), f"screenshot present: {rel}")
 
     blob = json.dumps(manifest)
     check(not any(ph in blob for ph in ("TODO", "TEMP")), "no template placeholders left")

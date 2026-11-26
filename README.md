@@ -10,7 +10,7 @@
   <a href="LICENSE"><img alt="Licence" src="https://img.shields.io/badge/licence-GPL--3.0--only-8A6A1F"></a>
   <img alt="Target" src="https://img.shields.io/badge/target-CardputerZero%20%C2%B7%20aarch64-1A1713">
   <img alt="Package" src="https://img.shields.io/badge/package-p4wnp1--panel.deb-1A1713">
-  <img alt="Tests" src="https://img.shields.io/badge/host%20suites-6%20passing-2E6F4E">
+  <img alt="Tests" src="https://img.shields.io/badge/host%20suites-7%20passing-2E6F4E">
   <img alt="Hardware" src="https://img.shields.io/badge/on%20hardware-not%20yet%20verified-9B2C2C">
 </p>
 
@@ -23,39 +23,41 @@ device's own Wi-Fi settings keep working.
 
 ## Install
 
-Grab the package from [the latest release](https://github.com/at0m-b0mb/P4wnP1-CardputerZero/releases/latest)
-and install it on the device:
+Take the package from [the latest release](https://github.com/at0m-b0mb/P4wnP1-CardputerZero/releases/latest):
 
 ```bash
-sudo apt install ./P4wnP1_0.2.1_rev1_arm64.deb
+sudo apt install ./P4wnP1_0.3.0_rev1_arm64.deb
 ```
 
 It appears in APPLaunch as **P4wnP1**. `apt remove` leaves the device as it was found; `apt
-purge` additionally removes `/etc/p4wnp1_panel.conf`. The current release is marked a
-**pre-release** because it has not yet run on a CardputerZero — see
+purge` additionally removes `/etc/p4wnp1_panel.conf`. The current release is a
+**pre-release**, because it has not yet run on a CardputerZero — see
 [Not yet verified on hardware](#not-yet-verified-on-hardware).
+
+## Six screens
 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="images/screens-dark.png">
-    <img src="images/screens.png" alt="Status, Cable and Payloads screens" width="100%">
+    <img src="images/screens.png" alt="Status, Cable, Payloads, Loadouts, Jobs and System" width="100%">
   </picture>
 </p>
 
-## Three screens
-
 | | |
 |---|---|
-| **Status** | what the service reports: USB composition, interface addresses, Wi-Fi, reflexes, running jobs |
+| **Status** | what the service reports: USB composition, interface addresses, Wi-Fi, reflexes, running jobs — re-read every five seconds |
 | **Cable** | compose a USB gadget and watch the endpoint budget *before* deploying, not after |
 | **Payloads** | list stored HID scripts and run one against the attached host |
+| **Loadouts** | apply a saved bundle of USB, network and reflex settings; pin one to boot; delete one |
+| **Jobs** | what is running right now, re-read every two seconds, and a way to stop all of it |
+| **System** | which build this is, what it is talking to, and identify / reboot / shut down |
 
 ### Where the keys take you
 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="images/flow-dark.png">
-    <img src="images/flow.png" alt="Key navigation and the confirm flow" width="100%">
+    <img src="images/flow.png" alt="Key navigation and the shared confirm flow" width="100%">
   </picture>
 </p>
 
@@ -80,19 +82,38 @@ plus both network functions plus mass storage is exactly 7, and raw HID on top o
 The panel reports what the service reports. **It cannot tell you whether an attached host
 accepted what was typed into it**, and it does not pretend to.
 
+- **It stops claiming a reading the moment it stops having one.** Status re-reads every five
+  seconds and Jobs every two. When a read fails the headline stops saying *Service up*, every
+  figure under it dims to mark it last-known, and the corner says how old it is. Four states
+  are distinguished and tested separately: never reached, live, *not refreshing* (the poll is
+  wedged, the service may be fine) and *lost the service*. Those last two look alike on a
+  naive display and call for opposite actions.
 - A reply that cannot be read counts as *did not answer*, never as *answered with nothing*.
-  Those are different claims and the screen renders them differently.
+  An empty shelf of loadouts and an unreachable service put the same number of rows on
+  screen, and the panel words them differently.
 - Where a value is unknown it says so, rather than showing a zero that would read as measured.
-- Deploying re-enumerates the host's USB connection. Running a payload types into whatever is
-  plugged in. Both are named before they happen, not after.
+  A job whose source carries no title shows its id and says the source has no title, rather
+  than a filename the service never sent.
+- Every action that changes the device is named before it happens, in the same shape:
+  *selected → confirm → running → result*, with the result in the service's own words.
+  Deploying re-enumerates the host's USB connection, running a payload types into whatever is
+  plugged in, and a loadout changes both at once.
+- Reboot and shutdown kill the process drawing the screen, so the screen says what is about to
+  happen *before* the call and takes it back only if the call is refused. It cannot report its
+  own success.
 - A service that is down and a service that refuses are distinguished, because they call for
   different actions.
-- **Status re-reads every five seconds, and says so.** The moment a read fails the headline stops
-  saying *Service up*, the figures under it dim to mark them as last-known, and the corner reports
-  how old they are. A panel left on a desk should not keep asserting something it checked once.
-  Four states are distinguished and tested separately: never reached, live, *not refreshing* (the
-  poll itself is wedged) and *lost the service* — the last two look alike and call for opposite
-  actions.
+
+## Networking is borrowed, not seized
+
+P4wnP1's `install.sh` disables NetworkManager outright, which on a CardputerZero breaks
+LaunchWizard and Settings — both depend on it. So the panel stops it when a network mode is
+**armed** and restores it on **disarm**, never at install time.
+
+The property that matters is not "disarm restores it". It is that it is restored even when
+disarm never happens: a crash, a kill, a power cut, or the package removed while armed.
+Custody is recorded on disk *before* NetworkManager is stopped and cleared only *after* it is
+running again, and the same reconciliation runs on startup, arm, disarm and removal.
 
 ## Not yet verified on hardware
 
@@ -112,7 +133,7 @@ what cannot.
 ## Building
 
 ```bash
-./run-tests.sh      # six host suites, none needing hardware
+./run-tests.sh      # seven host suites, none needing hardware
 ./build-deb.sh      # the arm64 .deb, built natively in a Debian container
 ./test-install.sh   # install it, inspect it, remove it, purge it
 ```
@@ -124,6 +145,7 @@ what cannot.
 | `test_network_custody` | that NetworkManager is always handed back |
 | `test_status_parse` | the service's reply shapes |
 | `test_freshness` | that a reading is never shown as current once it stops being so |
+| `test_catalog` | stored items and jobs, and that "none" never masquerades as "could not ask" |
 | `test_rpc_integration` | the real client over a real socket, against `fake_service.py` |
 
 The simulator runs on macOS and Linux:
@@ -134,23 +156,16 @@ cmake --preset darwin-arm64 && cmake --build --preset darwin-arm64-dbg
 ```
 
 `P4WNP1_API` and `P4WNP1_TOKEN` point the panel at a service; `app/tests/fake_service.py`
-stands in for one while there is no device. `P4WNP1_PAGE`, `P4WNP1_DEPLOY_STATE` and
-`P4WNP1_SHOT` capture any screen without driving the keypad, which is how every image in this
-README was made.
+stands in for one while there is no device.
+
+**The screenshots in this README were made by pressing the keys, not by faking the state they
+produce.** `P4WNP1_KEYS=down,enter,y` replays keystrokes through the same handler a real
+keypress goes through, so a capture is evidence about the wiring and not only the drawing.
+`P4WNP1_PAGE`, `P4WNP1_ACTION`, `P4WNP1_DEPLOY_STATE` and `P4WNP1_SHOT` select the screen,
+the pending question, the band state and when to capture.
 
 **No cross toolchain is needed.** On Apple Silicon the container is already aarch64 Linux, so
 its root is a valid sysroot and `-DCM0_SDK_ROOT=/` satisfies the CM0 branch of the build.
-
-## Networking is borrowed, not seized
-
-P4wnP1's `install.sh` disables NetworkManager outright, which on a CardputerZero breaks
-LaunchWizard and Settings — both depend on it. So the panel stops it when a network mode is
-**armed** and restores it on **disarm**, never at install time.
-
-The property that matters is not "disarm restores it". It is that it is restored even when
-disarm never happens: a crash, a kill, a power cut, or the package removed while armed.
-Custody is recorded on disk *before* NetworkManager is stopped and cleared only *after* it is
-running again, and the same reconciliation runs on startup, arm, disarm and removal.
 
 ## Publishing to the CardputerZero store
 
@@ -164,8 +179,11 @@ a new app is not auto-merged — a short video of it running *on a real device* 
 posted in the packages PR before a maintainer merges it. Version updates merge on validation
 alone. So publishing waits on the hardware, not on the code.
 
-Worth knowing if you scaffold your own app: the Template ships a **100×100** icon and the
-store requires **128–512**, so a fresh scaffold fails that check until the icon is replaced.
+Two things worth knowing if you scaffold your own app from the Template: it ships a **100×100**
+icon where the store requires **128–512**, so a fresh scaffold fails that check until the icon
+is replaced; and the manifest's version and the CMake project version are written in two
+places with nothing holding them together, so `check-store-manifest.py` here asserts they
+match after they silently drifted apart once.
 
 ## Licence
 
