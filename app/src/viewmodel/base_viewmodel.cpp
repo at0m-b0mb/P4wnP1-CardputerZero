@@ -95,24 +95,51 @@ model::AppPage BaseViewModel::current_page() const {
     return model_.current_page();
 }
 
-void BaseViewModel::show_status_page() {
-    model_.set_current_page(model::AppPage::Status);
+void BaseViewModel::enter_page(model::AppPage page) {
+    model_.set_current_page(page);
+
+    // The cursor and the confirm band are shared by every list screen, so
+    // arriving at a new page has to reset both.
+    //
+    // Leaving the band armed is the dangerous one: "Delete airgap?" armed on
+    // Loadouts would still be on screen after a page change, now sitting over
+    // the System screen where Y means reboot. Leaving the cursor is merely
+    // wrong -- row 4 of a five-row payload list is row 4 of a three-row
+    // System screen -- but it is wrong in a way that puts the highlight on
+    // something the operator did not choose.
+    gadget_cursor_subject_.set(0);
+    deploy_state_subject_.set(0);
+
     publish_all();
+}
+
+void BaseViewModel::show_status_page() {
+    enter_page(model::AppPage::Status);
 }
 
 void BaseViewModel::show_cable_page() {
-    model_.set_current_page(model::AppPage::Cable);
-    publish_all();
+    enter_page(model::AppPage::Cable);
 }
 
 void BaseViewModel::show_payloads_page() {
-    model_.set_current_page(model::AppPage::Payloads);
-    publish_all();
+    enter_page(model::AppPage::Payloads);
+}
+
+void BaseViewModel::show_loadouts_page() {
+    enter_page(model::AppPage::Loadouts);
+}
+
+void BaseViewModel::show_jobs_page() {
+    enter_page(model::AppPage::Jobs);
+}
+
+void BaseViewModel::show_system_page() {
+    enter_page(model::AppPage::System);
 }
 
 void BaseViewModel::toggle_page() {
     model_.toggle_page();
-    publish_all();
+    enter_page(model_.current_page());
 }
 
 void BaseViewModel::toggle_selected_gadget(int bit_count) {
@@ -140,6 +167,10 @@ void BaseViewModel::move_gadget_cursor(int delta, int row_count) {
         next += row_count;
     }
     gadget_cursor_subject_.set(next);
+}
+
+void BaseViewModel::set_gadget_cursor(int32_t index) {
+    gadget_cursor_subject_.set(index < 0 ? 0 : index);
 }
 
 void BaseViewModel::toggle_bold_text() {

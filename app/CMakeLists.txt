@@ -538,6 +538,14 @@ target_link_libraries(${PROJECT_NAME}_view
         ${PROJECT_NAME}_platform
 )
 
+# The System screen states which build it is. Taken from the project version
+# so the screen, the .deb and the release tag cannot drift apart -- a panel
+# that reports a version it is not is worse than one that reports none.
+target_compile_definitions(${PROJECT_NAME}_view
+    PRIVATE
+        P4WNP1_PANEL_VERSION="${PROJECT_VERSION}"
+)
+
 # ====================================================
 # ViewModel sources
 # ====================================================

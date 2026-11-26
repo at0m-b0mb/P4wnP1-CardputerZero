@@ -45,6 +45,41 @@ constexpr std::array<ShortcutSpec, 3> kPayloadShortcuts = {{
     {"X", "Stop all"},
 }};
 
+// "Apply" rather than "Deploy": a loadout changes USB *and* networking at
+// once, so the word should not suggest it only touches the cable.
+constexpr std::array<ShortcutSpec, 3> kLoadoutShortcuts = {{
+    {"Enter", "Apply"},
+    {"B", "Boot"},
+    {"X", "Delete"},
+}};
+
+constexpr std::array<ShortcutSpec, 3> kJobShortcuts = {{
+    {"ESC", "Back"},
+    {"X", "Stop all"},
+    {"Tab", "Next page"},
+}};
+
+constexpr std::array<ShortcutSpec, 3> kSystemShortcuts = {{
+    {"ESC", "Back"},
+    {"Enter", "Select"},
+    {"Tab", "Next page"},
+}};
+
+// The hint bar replaces the icon row on every page that has keys worth
+// hinting -- which is every page except Status, where the icons ARE the
+// content.
+const ShortcutSpec* shortcuts_for(model::AppPage page) {
+    switch (page) {
+        case model::AppPage::Cable:    return kCableShortcuts.data();
+        case model::AppPage::Payloads: return kPayloadShortcuts.data();
+        case model::AppPage::Loadouts: return kLoadoutShortcuts.data();
+        case model::AppPage::Jobs:     return kJobShortcuts.data();
+        case model::AppPage::System:   return kSystemShortcuts.data();
+        case model::AppPage::Status:
+        default:                       return nullptr;
+    }
+}
+
 } // namespace
 
 NavBar::NavBar(lv_obj_t* parent, viewmodel::BaseViewModel& view_model, app::AssetManager& assets)
@@ -108,10 +143,12 @@ void NavBar::create_shortcut_hints() {
         text_font = &lv_font_montserrat_14;
     }
 
+    const ShortcutSpec* specs = shortcuts_for(view_model_.current_page());
+    if (!specs) {
+        specs = kCableShortcuts.data();  // built but hidden; Status shows icons
+    }
     for (size_t index = 0; index < kCableShortcuts.size(); ++index) {
-        const auto& shortcut = view_model_.current_page() == model::AppPage::Payloads
-                                   ? kPayloadShortcuts[index]
-                                   : kCableShortcuts[index];
+        const auto& shortcut = specs[index];
         auto* item = lv_obj_create(shortcut_bar_);
         lv_obj_remove_style_all(item);
         lv_obj_set_size(item, LV_SIZE_CONTENT, LV_PCT(100));
@@ -156,8 +193,7 @@ void NavBar::create_icon_buttons() {
 }
 
 void NavBar::update_icon_buttons() {
-    const bool is_cable_page = view_model_.current_page() == model::AppPage::Cable;
-    const bool is_payloads_page = view_model_.current_page() == model::AppPage::Payloads;
+    const bool shows_shortcuts = shortcuts_for(view_model_.current_page()) != nullptr;
     const bool is_dark_mode = view_model_.is_dark_mode();
     const auto colors = view::palette(is_dark_mode);
     const char* theme_icon = is_dark_mode ? ICON_SUN : ICON_MOON;
@@ -178,14 +214,14 @@ void NavBar::update_icon_buttons() {
         {"", toggle_page_cb},
     }};
 
-    platform::set_nav_shortcut_mode(is_cable_page || is_payloads_page);
+    platform::set_nav_shortcut_mode(shows_shortcuts);
     for (auto* key_label : shortcut_key_labels_) {
         if (key_label) {
             lv_obj_set_style_text_color(key_label, colors.brass, 0);
         }
     }
     if (shortcut_bar_) {
-        if (is_cable_page || is_payloads_page) {
+        if (shows_shortcuts) {
             lv_obj_remove_flag(shortcut_bar_, LV_OBJ_FLAG_HIDDEN);
         }
         else {
@@ -193,7 +229,7 @@ void NavBar::update_icon_buttons() {
         }
     }
 
-    const auto& icons = (is_cable_page || is_payloads_page) ? cable_icons : status_icons;
+    const auto& icons = (shows_shortcuts) ? cable_icons : status_icons;
     for (size_t i = 0; i < icon_buttons_.size(); ++i) {
         auto& button = icon_buttons_[i];
         if (!button) {
@@ -202,7 +238,7 @@ void NavBar::update_icon_buttons() {
 
         button->set_text(icons[i].text);
         if (button->root()) {
-            if (is_cable_page || is_payloads_page) {
+            if (shows_shortcuts) {
                 lv_obj_add_flag(button->root(), LV_OBJ_FLAG_HIDDEN);
             }
             else {

@@ -38,13 +38,11 @@ void BaseModel::set_current_page(AppPage page) {
 }
 
 void BaseModel::toggle_page() {
-    // Three pages now, so this cycles rather than flips.
-    switch (current_page_) {
-        case AppPage::Status:   current_page_ = AppPage::Cable;    break;
-        case AppPage::Cable:    current_page_ = AppPage::Payloads; break;
-        case AppPage::Payloads:
-        default:                current_page_ = AppPage::Status;   break;
-    }
+    // Six pages, walked in a ring. Written as arithmetic over the enum rather
+    // than a switch so that adding a page cannot leave one unreachable --
+    // which a forgotten switch arm does silently.
+    const int next = (static_cast<int>(current_page_) + 1) % kAppPageCount;
+    current_page_ = static_cast<AppPage>(next);
 }
 
 } // namespace model

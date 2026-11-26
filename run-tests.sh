@@ -30,7 +30,12 @@ clang++ -std=c++17 -Wall -Wextra \
 run "reading freshness" "$OUT/freshness"
 
 clang++ -std=c++17 -Wall -Wextra -I"$JSON" \
-  src/service/status_parse.cpp src/service/rpc_client.cpp tests/test_rpc_integration.cpp \
+  src/service/catalog.cpp tests/test_catalog.cpp -o "$OUT/catalog"
+run "stored items and jobs" "$OUT/catalog"
+
+clang++ -std=c++17 -Wall -Wextra -I"$JSON" \
+  src/service/status_parse.cpp src/service/catalog.cpp src/service/rpc_client.cpp \
+  tests/test_rpc_integration.cpp \
   -lcurl -o "$OUT/rpc"
 printf 'test-token-not-a-real-credential' > "$OUT/good.token"
 printf 'wrong-token' > "$OUT/bad.token"

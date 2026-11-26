@@ -260,4 +260,117 @@ StatusSnapshot RpcClient::fetch_status() {
     return snapshot;
 }
 
+// ---------------------------------------------------------------------------
+// Shared refusal handling
+// ---------------------------------------------------------------------------
+
+ActionOutcome RpcClient::outcome_of(const RpcResult& result, const char* fallback) {
+    ActionOutcome out;
+    if (result.ok) {
+        out.ok = true;
+        return out;
+    }
+    if (!result.error.empty()) {
+        // Nothing answered at all. Said plainly, because "no service" and
+        // "the service said no" are different problems with different fixes.
+        out.error = "no service: " + result.error;
+        return out;
+    }
+    const nlohmann::json err = nlohmann::json::parse(result.body, nullptr, false);
+    if (!err.is_discarded() && err.is_object()) {
+        const auto field = err.find("error");
+        if (field != err.end() && field->is_string() && !field->get<std::string>().empty()) {
+            out.error = field->get<std::string>();
+            return out;
+        }
+    }
+    out.error = fallback;
+    return out;
+}
+
+ActionOutcome RpcClient::msg_action(const std::string& method,
+                                    const std::string& name,
+                                    const char* fallback) {
+    if (name.empty()) {
+        ActionOutcome out;
+        out.error = "nothing selected";
+        return out;
+    }
+    nlohmann::json body;
+    body["msg"] = name;
+    return outcome_of(call(method, body.dump()), fallback);
+}
+
+// ---------------------------------------------------------------------------
+// Loadouts
+// ---------------------------------------------------------------------------
+
+Listing RpcClient::list_loadouts() {
+    const RpcResult r = call("ListStoredMasterTemplate");
+    if (!r.ok) {
+        return {};  // ok stays false: no answer is not an empty shelf
+    }
+    return parse_string_array(r.body);
+}
+
+Listing RpcClient::startup_loadout() {
+    const RpcResult r = call("GetStartupMasterTemplate");
+    if (!r.ok) {
+        return {};
+    }
+    return parse_msg(r.body);
+}
+
+ActionOutcome RpcClient::deploy_loadout(const std::string& name) {
+    return msg_action("DeployStoredMasterTemplate", name, "the service refused the loadout");
+}
+
+ActionOutcome RpcClient::set_startup_loadout(const std::string& name) {
+    return msg_action("SetStartupMasterTemplate", name, "the service would not set it");
+}
+
+ActionOutcome RpcClient::delete_loadout(const std::string& name) {
+    return msg_action("DeleteStoredMasterTemplate", name, "the service would not delete it");
+}
+
+// ---------------------------------------------------------------------------
+// Jobs
+// ---------------------------------------------------------------------------
+
+JobIds RpcClient::running_job_ids() {
+    const RpcResult r = call("HIDGetRunningScriptJobs");
+    if (!r.ok) {
+        return {};
+    }
+    return parse_job_ids(r.body);
+}
+
+std::string RpcClient::job_label(int id) {
+    nlohmann::json body;
+    body["id"] = id;
+    const RpcResult r = call("HIDGetRunningJobState", body.dump());
+    if (!r.ok) {
+        return {};
+    }
+    return parse_job_label(r.body);
+}
+
+// ---------------------------------------------------------------------------
+// The device itself
+// ---------------------------------------------------------------------------
+
+ActionOutcome RpcClient::reboot() {
+    return outcome_of(call("Reboot"), "the service would not reboot");
+}
+
+ActionOutcome RpcClient::shutdown() {
+    return outcome_of(call("Shutdown"), "the service would not shut down");
+}
+
+ActionOutcome RpcClient::set_led_blink(int count) {
+    nlohmann::json body;
+    body["blink_count"] = count;
+    return outcome_of(call("SetLEDSettings", body.dump()), "the service would not set the LED");
+}
+
 } // namespace service

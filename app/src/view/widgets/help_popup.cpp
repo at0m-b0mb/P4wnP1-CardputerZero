@@ -8,6 +8,7 @@
 
 #include "asset_manager.h"
 #include "base_viewmodel.h"
+#include "base_model.h"
 #include "theme.h"
 
 #include <array>
@@ -21,19 +22,80 @@ struct HelpRow {
     const char* action;
 };
 
+// One table per page, because help that lists another page's keys is worse
+// than no help at all. The Cable table used to read "Decrease / Increase",
+// inherited from the counter app this was scaffolded from, which described a
+// screen that has never existed here.
+//
+// At most five rows fit the panel; the page key and the shared keys live in
+// the footer rather than being repeated in every table.
+
 constexpr std::array<HelpRow, 5> kStatusRows = {{
     {"HOLD ESC / 4", "Exit"},
+    {"TAB", "Next page"},
     {"5", "Text weight"},
     {"6", "Light / dark"},
     {"7", "Version info"},
-    {"8", "Open cable"},
 }};
 
-constexpr std::array<HelpRow, 3> kCableRows = {{
-    {"ESC", "Back to home"},
-    {"Z / LEFT", "Decrease"},
-    {"C / RIGHT", "Increase"},
+constexpr std::array<HelpRow, 5> kCableRows = {{
+    {"UP / DOWN", "Move the cursor"},
+    {"LEFT / RIGHT", "Jump three rows"},
+    {"SPACE", "Toggle a function"},
+    {"ENTER", "Deploy (asks first)"},
+    {"Y / N", "Answer the question"},
 }};
+
+constexpr std::array<HelpRow, 4> kPayloadsRows = {{
+    {"UP / DOWN", "Move the cursor"},
+    {"ENTER", "Run it (asks first)"},
+    {"X", "Stop everything"},
+    {"Y / N", "Answer the question"},
+}};
+
+constexpr std::array<HelpRow, 5> kLoadoutsRows = {{
+    {"UP / DOWN", "Move the cursor"},
+    {"ENTER", "Apply the loadout"},
+    {"B", "Apply it at boot"},
+    {"X", "Delete it"},
+    {"Y / N", "Answer the question"},
+}};
+
+constexpr std::array<HelpRow, 2> kJobsRows = {{
+    {"X", "Stop everything"},
+    {"", "This page refreshes itself"},
+}};
+
+constexpr std::array<HelpRow, 3> kSystemRows = {{
+    {"UP / DOWN", "Move the cursor"},
+    {"ENTER", "Do the selected thing"},
+    {"Y / N", "Answer the question"},
+}};
+
+// What the badge calls each page, and which table it draws.
+struct PageHelp {
+    const char* badge;
+    const HelpRow* rows;
+    std::size_t count;
+};
+
+PageHelp help_for(model::AppPage page) {
+    switch (page) {
+        case model::AppPage::Cable:
+            return {"CABLE", kCableRows.data(), kCableRows.size()};
+        case model::AppPage::Payloads:
+            return {"PAYLOADS", kPayloadsRows.data(), kPayloadsRows.size()};
+        case model::AppPage::Loadouts:
+            return {"LOADOUTS", kLoadoutsRows.data(), kLoadoutsRows.size()};
+        case model::AppPage::Jobs:
+            return {"JOBS", kJobsRows.data(), kJobsRows.size()};
+        case model::AppPage::System:
+            return {"SYSTEM", kSystemRows.data(), kSystemRows.size()};
+        case model::AppPage::Status:
+        default:
+            return {"STATUS", kStatusRows.data(), kStatusRows.size()};
+    }
+}
 
 } // namespace
 
@@ -156,18 +218,16 @@ bool HelpPopup::visible() const {
 }
 
 void HelpPopup::update_rows(model::AppPage page) {
-    const bool cable = page == model::AppPage::Cable;
-    lv_label_set_text(page_badge_, cable ? "COUNTER" : "HOME");
+    const PageHelp help = help_for(page);
+    lv_label_set_text(page_badge_, help.badge);
     for (std::size_t i = 0; i < rows_.size(); ++i) {
-        const bool row_visible = cable ? i < kCableRows.size() : i < kStatusRows.size();
-        if (!row_visible) {
+        if (i >= help.count) {
             lv_obj_add_flag(rows_[i].row, LV_OBJ_FLAG_HIDDEN);
             continue;
         }
         lv_obj_remove_flag(rows_[i].row, LV_OBJ_FLAG_HIDDEN);
-        const auto& row = cable ? kCableRows[i] : kStatusRows[i];
-        lv_label_set_text(rows_[i].key, row.key);
-        lv_label_set_text(rows_[i].action, row.action);
+        lv_label_set_text(rows_[i].key, help.rows[i].key);
+        lv_label_set_text(rows_[i].action, help.rows[i].action);
     }
 }
 

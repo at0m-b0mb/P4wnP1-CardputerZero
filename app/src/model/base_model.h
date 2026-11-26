@@ -12,7 +12,15 @@ enum class AppPage {
     Status   = 0,
     Cable    = 1,
     Payloads = 2,
+    Loadouts = 3,
+    Jobs     = 4,
+    System   = 5,
 };
+
+// Pages in the order the page key walks them, and how many there are. Kept
+// here so the navbar, the help popup and the screen manager cannot disagree
+// about what exists.
+constexpr int kAppPageCount = 6;
 
 class BaseModel {
 public:

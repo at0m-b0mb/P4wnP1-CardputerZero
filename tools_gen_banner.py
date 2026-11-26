@@ -262,27 +262,47 @@ def render_banner(path, dark):
     print(f"  {os.path.basename(path)}  {W}x{H}  ({'dark' if dark else 'light'})")
 
 
+# All six screens, three across and two down. A single row of six would have
+# to shrink each shot below the point where its text is readable, and a shot
+# nobody can read is decoration rather than evidence.
+SCREEN_GRID = [
+    ("status-live", "Status",   "what the service reports"),
+    ("cable",       "Cable",    "compose a USB gadget"),
+    ("payloads",    "Payloads", "run a stored HID script"),
+    ("loadouts",    "Loadouts", "apply a saved bundle"),
+    ("jobs",        "Jobs",     "what is running now"),
+    ("system",      "System",   "identify, reboot, shut down"),
+]
+SCREEN_COLS = 3
+
+
 def render_screens(path, dark):
     p = panel(dark)
-    names = [("status-live-" + ("dark" if dark else "light") + ".png", "Status"),
-             ("cable-" + ("dark" if dark else "light") + ".png", "Cable"),
-             ("payloads-" + ("dark" if dark else "light") + ".png", "Payloads")]
-    shots = [(capture(n, 2), label) for n, label in names]
+    suffix = "-dark.png" if dark else "-light.png"
+    shots = [(capture(stem + suffix, 2), label, note)
+             for stem, label, note in SCREEN_GRID]
 
-    pad, gap, cap_h = 40, 32, 46
-    w = pad * 2 + sum(s.width for s, _ in shots) + gap * (len(shots) - 1)
-    h = pad * 2 + shots[0][0].height + cap_h
+    pad, gap_x, gap_y, cap_h = 40, 30, 30, 68
+    cell_w = shots[0][0].width
+    cell_h = shots[0][0].height
+    rows = (len(shots) + SCREEN_COLS - 1) // SCREEN_COLS
+
+    w = pad * 2 + cell_w * SCREEN_COLS + gap_x * (SCREEN_COLS - 1)
+    h = pad * 2 + rows * (cell_h + cap_h) + gap_y * (rows - 1)
     img = Image.new("RGB", (w, h), p["bg"])
     d = ImageDraw.Draw(img)
     f_cap = font(MONO, 22)
+    f_note = font(MONO, 17)
 
-    x = pad
-    for shot, label in shots:
-        d.rectangle((x - 3, pad - 3, x + shot.width + 2, pad + shot.height + 2),
+    for i, (shot, label, note) in enumerate(shots):
+        col, row = i % SCREEN_COLS, i // SCREEN_COLS
+        x = pad + col * (cell_w + gap_x)
+        y = pad + row * (cell_h + cap_h + gap_y)
+        d.rectangle((x - 3, y - 3, x + cell_w + 2, y + cell_h + 2),
                     outline=p["rule"], width=2)
-        img.paste(shot, (x, pad))
-        d.text((x, pad + shot.height + 16), label, font=f_cap, fill=p["ink2"])
-        x += shot.width + gap
+        img.paste(shot, (x, y))
+        d.text((x, y + cell_h + 16), label, font=f_cap, fill=p["ink"])
+        d.text((x, y + cell_h + 42), note, font=f_note, fill=p["ink2"])
 
     img.save(path)
     print(f"  {os.path.basename(path)}  {w}x{h}  ({'dark' if dark else 'light'})")
@@ -310,7 +330,7 @@ def render_flow(path, dark):
     keys, it is that the two destructive actions sit behind the same confirm
     shape, and that Esc means 'dismiss' before it means 'back'."""
     p = panel(dark)
-    W, H = 2200, 1060
+    W, H = 2200, 1560
     img = Image.new("RGB", (W, H), p["bg"])
     d = ImageDraw.Draw(img)
 
@@ -329,7 +349,8 @@ def render_flow(path, dark):
     pages = [
         ("Status", "read only", [
             ("", "Nothing here changes the device."),
-            ("", "It reports what the service reports."),
+            ("", "Re-reads every 5s, and says"),
+            ("", "how old the figures are."),
         ]),
         ("Cable", "compose USB", [
             ("Up Dn", "move between functions"),
@@ -342,16 +363,37 @@ def render_flow(path, dark):
             ("Enter", "run, after a confirm"),
             ("X", "stop everything running"),
         ]),
+        ("Loadouts", "stored bundles", [
+            ("Up Dn", "move between loadouts"),
+            ("Enter", "apply, after a confirm"),
+            ("B", "apply it at every boot"),
+            ("X", "delete, after a confirm"),
+        ]),
+        ("Jobs", "what is running", [
+            ("", "Re-reads every 2s, because"),
+            ("", "jobs end by themselves."),
+            ("X", "stop everything running"),
+        ]),
+        ("System", "the device itself", [
+            ("Up Dn", "move between actions"),
+            ("Enter", "do it, after a confirm"),
+            ("", "Reboot and shutdown end"),
+            ("", "the session drawing this."),
+        ]),
     ]
 
+    COLS = 3
+    row_h, row_gap = 300, 96
     centres = []
     for i, (name, kind, rows) in enumerate(pages):
-        x = col_x0 + i * (col_w + gap)
-        box = (x, top, x + col_w, top + 300)
+        col, row = i % COLS, i // COLS
+        x = col_x0 + col * (col_w + gap)
+        y = top + row * (row_h + row_gap)
+        box = (x, y, x + col_w, y + row_h)
         rounded(d, box, 14, fill=p["surf"], outline=p["rule"], width=2)
-        d.text((x + 28, top + 24), name, font=f_page, fill=p["ink"])
-        d.text((x + 28, top + 70), kind.upper(), font=f_key, fill=p["brass"])
-        yy = top + 118
+        d.text((x + 28, y + 24), name, font=f_page, fill=p["ink"])
+        d.text((x + 28, y + 70), kind.upper(), font=f_key, fill=p["brass"])
+        yy = y + 118
         for key, what in rows:
             if key:
                 d.text((x + 28, yy), key, font=f_key, fill=p["brass"])
@@ -359,19 +401,26 @@ def render_flow(path, dark):
             else:
                 d.text((x + 28, yy), what, font=f_body, fill=p["ink2"])
             yy += 40
-        centres.append((x + col_w // 2, box))
+        centres.append(box)
 
-    # The page key cycles the three, so the arrows wrap.
-    for i in range(2):
-        x0 = centres[i][1][2]
-        x1 = centres[i + 1][1][0]
-        arrow(d, x0 + 10, top + 150, x1 - 10, top + 150, p["brass"])
-    d.text((centres[0][1][2] + 24, top + 108), "page", font=f_key, fill=p["brass"])
-    d.text((centres[1][1][2] + 24, top + 108), "page", font=f_key, fill=p["brass"])
+    # Tab walks all six in a ring. Arrows run along each row; the step from
+    # the end of one row to the start of the next, and the wrap from the last
+    # page back to the first, are said in words rather than drawn as cables
+    # across the whole figure, which would cross everything else.
+    for row in range(2):
+        for col in range(COLS - 1):
+            i = row * COLS + col
+            y_mid = centres[i][1] + 150
+            arrow(d, centres[i][2] + 10, y_mid, centres[i + 1][0] - 10, y_mid, p["brass"])
+            d.text((centres[i][2] + 20, y_mid - 42), "Tab", font=f_key, fill=p["brass"])
+
+    wrap_y = top + 2 * row_h + row_gap + 34
+    d.text((col_x0, wrap_y), "Tab wraps: Payloads to Loadouts, and System back to Status.",
+           font=f_note, fill=p["ink2"])
 
     # --- the confirm shape, shared by both destructive actions ------------
-    cy = top + 420
-    d.text((80, cy - 56), "Both destructive actions use the same shape",
+    cy = top + 2 * 300 + 96 + 170
+    d.text((80, cy - 56), "Every action that changes the device uses this shape",
            font=f_page, fill=p["ink"])
 
     stages = [
@@ -403,11 +452,13 @@ def render_flow(path, dark):
     d.text((80 + bw + 40, back_y + 12), "N or Esc", font=f_key, fill=p["ink2"])
 
     # --- the one sentence worth drawing -----------------------------------
-    note_y = H - 170
+    # Positioned from the back arrow, not from the canvas bottom: pinned to
+    # H it collided with the "N or Esc" label the moment the grid grew.
+    note_y = back_y + 118
     d.line((80, note_y - 28, W - 80, note_y - 28), fill=p["rule"], width=2)
     for i, line in enumerate([
         "Esc dismisses a confirm or a result first. Only on an idle screen does it mean go back.",
-        "Deploying re-enumerates the host's USB connection. Running a payload types into it. Both say so before they happen.",
+        "Deploying re-enumerates USB. A payload types into the attached host. A loadout changes both at once. Each says so first.",
     ]):
         d.text((80, note_y + i * 40), line, font=f_note,
                fill=p["ink"] if i == 0 else p["ink2"])

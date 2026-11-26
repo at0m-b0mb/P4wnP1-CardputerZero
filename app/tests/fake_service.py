@@ -48,7 +48,17 @@ REPLIES = {
     "GetDeployedTriggerActionSet": {
         "TriggerActions": [{"isActive": True}, {"isActive": True}, {"isActive": False}]
     },
-    "HIDGetRunningScriptJobs": {"ids": [7]},
+    "HIDGetRunningScriptJobs": {"ids": [7, 9]},
+    # Loadouts are P4wnP1's "master templates": one stored bundle of USB,
+    # network, Bluetooth and reflex settings.
+    "ListStoredMasterTemplate": {"msgArray": ["office-rig", "airgap", "demo-bench"]},
+    "GetStartupMasterTemplate": {"msg": "airgap"},
+    "DeployStoredMasterTemplate": {},
+    "SetStartupMasterTemplate": {},
+    "DeleteStoredMasterTemplate": {},
+    "Reboot": {},
+    "Shutdown": {},
+    "SetLEDSettings": {},
     # Bare names, exactly as the real ListStoredHIDScripts returns them. The
     # run below refuses anything that is not an absolute path, which is what
     # the device does and what makes the trap reproducible here.
@@ -61,7 +71,23 @@ REPLIES = {
 seen = []
 deployed = []          # every gadget message the client sent us
 ran = []               # every scriptPath the client asked us to run
+acted = []             # every {msg} action: loadout deploy/startup/delete
 refuse_deploy = [None] # set to a message to make the next deploy fail
+refuse_next = {}       # method -> message, to make one call fail
+
+# What each running job's source looks like. The service has no RPC saying
+# which FILE a job came from, so a label can only come from the source text --
+# job 9 deliberately has no comment header, to exercise the fallback.
+JOB_SOURCES = {
+    7: "// quiet recon of the host\nlayout('us');\nGUI r\n",
+    9: "layout('us');\nSTRING whoami\n",
+}
+
+MSG_ACTIONS = (
+    "DeployStoredMasterTemplate",
+    "SetStartupMasterTemplate",
+    "DeleteStoredMasterTemplate",
+)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -87,6 +113,13 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, {"deployed": deployed})
         elif self.path == "/__ran":
             self._send(200, {"ran": ran})
+        elif self.path == "/__acted":
+            self._send(200, {"acted": acted})
+        elif self.path.startswith("/__refuse_method/"):
+            rest = self.path[len("/__refuse_method/"):]
+            method, _, message = rest.partition("/")
+            refuse_next[method] = message.replace("%20", " ") or "refused"
+            self._send(200, {"ok": True})
         elif self.path.startswith("/__refuse/"):
             refuse_deploy[0] = self.path[len("/__refuse/"):].replace("%20", " ")
             self._send(200, {"ok": True})
@@ -108,6 +141,28 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length") or 0)
         raw = self.rfile.read(length)
         seen.append(method)
+
+        if method in refuse_next:
+            self._send(400, {"error": refuse_next.pop(method)})
+            return
+
+        if method == "HIDGetRunningJobState":
+            try:
+                payload = json.loads(raw.decode() or "null")
+            except ValueError:
+                payload = None
+            job_id = (payload or {}).get("id")
+            self._send(200, {"source": JOB_SOURCES.get(job_id, "")})
+            return
+
+        if method in MSG_ACTIONS:
+            try:
+                payload = json.loads(raw.decode() or "null")
+            except ValueError:
+                payload = None
+            acted.append({"method": method, "msg": (payload or {}).get("msg")})
+            self._send(200, {})
+            return
 
         if method == "HIDRunScriptJob":
             try:

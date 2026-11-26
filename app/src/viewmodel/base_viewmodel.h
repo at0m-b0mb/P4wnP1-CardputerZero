@@ -50,9 +50,22 @@ public:
     void show_status_page();
     void show_cable_page();
     void show_payloads_page();
+    void show_loadouts_page();
+    void show_jobs_page();
+    void show_system_page();
+
+    // Switch page, resetting the shared cursor and dismissing any armed
+    // confirm band. Every page change goes through here.
+    void enter_page(model::AppPage page);
     void toggle_page();
     void toggle_selected_gadget(int bit_count);
     void move_gadget_cursor(int delta, int row_count);
+
+    // Put the cursor somewhere specific. Needed when the list under it got
+    // shorter -- deleting the last row leaves a cursor pointing past the end,
+    // and a cursor that silently lands on a different item is worse than one
+    // that points at nothing.
+    void set_gadget_cursor(int32_t index);
     int32_t gadget_mask() const;
     int32_t gadget_cursor() const;
     void toggle_bold_text();

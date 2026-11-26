@@ -15,6 +15,9 @@
 #include "screen_manager.h"
 #include "cable_screen.h"
 #include "payloads_screen.h"
+#include "loadouts_screen.h"
+#include "jobs_screen.h"
+#include "system_screen.h"
 #include "base_viewmodel.h"
 #include "theme.h"
 #include "toast.h"
@@ -23,6 +26,7 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <vector>
 
 #if USE_DESKTOP
 #include "desktop_simulator_frame.h"
@@ -171,6 +175,99 @@ private:
             return true;
         }
 
+        // Loadouts screen: deploy a stored bundle, pin one to boot, delete
+        // one. All three pause on the same band, which is why the band
+        // remembers WHICH it is asking about.
+        if (view_model_.current_page() == model::AppPage::Loadouts && !long_pressed) {
+            const int rows = screen::loadout_count();
+            switch (key) {
+                case LV_KEY_UP:
+                    view_model_.move_gadget_cursor(-1, rows);
+                    return true;
+                case LV_KEY_DOWN:
+                    view_model_.move_gadget_cursor(1, rows);
+                    return true;
+                case LV_KEY_ENTER:
+                    screen::arm_loadout_action(view_model_, screen::LoadoutAction::Deploy);
+                    return true;
+                case 'b':
+                case 'B':
+                    screen::arm_loadout_action(view_model_, screen::LoadoutAction::SetStartup);
+                    return true;
+                case 'x':
+                case 'X':
+                    screen::arm_loadout_action(view_model_, screen::LoadoutAction::Delete);
+                    return true;
+                case 'y':
+                case 'Y':
+                    if (view_model_.deploy_state() == 1) {
+                        view_model_.set_deploy_state(2);
+                        lv_refr_now(nullptr);
+                        screen::confirm_loadout_action(view_model_);
+                    }
+                    return true;
+                case 'n':
+                case 'N':
+                    if (view_model_.deploy_state() != 0) {
+                        view_model_.set_deploy_state(0);
+                    }
+                    return true;
+                default:
+                    break;
+            }
+        }
+
+        // Jobs screen: it polls itself, so the only key is "stop everything".
+        if (view_model_.current_page() == model::AppPage::Jobs && !long_pressed) {
+            switch (key) {
+                case 'x':
+                case 'X':
+                    // No confirmation: stopping only ever reduces what the
+                    // attached host is being told.
+                    screen::cancel_all_jobs(view_model_);
+                    return true;
+                case 'n':
+                case 'N':
+                    if (view_model_.deploy_state() != 0) {
+                        view_model_.set_deploy_state(0);
+                    }
+                    return true;
+                default:
+                    break;
+            }
+        }
+
+        // System screen: identify, reboot, shut down.
+        if (view_model_.current_page() == model::AppPage::System && !long_pressed) {
+            switch (key) {
+                case LV_KEY_UP:
+                    view_model_.move_gadget_cursor(-1, screen::kSystemActionRows);
+                    return true;
+                case LV_KEY_DOWN:
+                    view_model_.move_gadget_cursor(1, screen::kSystemActionRows);
+                    return true;
+                case LV_KEY_ENTER:
+                    screen::activate_system_row(view_model_);
+                    return true;
+                case 'y':
+                case 'Y':
+                    if (view_model_.deploy_state() == 1) {
+                        view_model_.set_deploy_state(2);
+                        lv_refr_now(nullptr);
+                        screen::confirm_system_action(view_model_);
+                    }
+                    return true;
+                case 'n':
+                case 'N':
+                    if (view_model_.deploy_state() != 0) {
+                        view_model_.set_deploy_state(0);
+                    }
+                    return true;
+                default:
+                    break;
+            }
+        }
+
         // Payloads screen: move the cursor, run under confirmation, stop all.
         if (view_model_.current_page() == model::AppPage::Payloads && !long_pressed) {
             const int rows = screen::payload_count();
@@ -262,8 +359,7 @@ private:
 
         // On the Cable screen, Esc first dismisses a confirm or a result; only
         // once the screen is idle does it mean "go back".
-        if ((view_model_.current_page() == model::AppPage::Cable ||
-             view_model_.current_page() == model::AppPage::Payloads) &&
+        if (view_model_.current_page() != model::AppPage::Status &&
             key == LV_KEY_ESC && !long_pressed && view_model_.deploy_state() != 0) {
             view_model_.set_deploy_state(0);
             return true;
@@ -312,6 +408,16 @@ private:
         exit_armed_ = false;
     }
 
+public:
+    // Feed a key through exactly the path a real keypress takes. Used by
+    // P4WNP1_KEYS so the screenshot tooling exercises the key handler rather
+    // than setting the state it would have produced -- a capture that bypasses
+    // the handler proves the drawing and nothing about the wiring.
+    bool inject_key(uint32_t key) {
+        return handle_key(key, false);
+    }
+
+private:
     static bool global_key_listener(uint32_t key,
                                     const char*,
                                     bool long_pressed,
@@ -397,8 +503,9 @@ int Application::run() {
                  loaded_config_path,
                  config.dark_mode ? "yes" : "no");
 
-        // P4WNP1_PAGE=status|cable|payloads: open straight to a page. Used
-        // with P4WNP1_SHOT to capture each screen without driving the keypad.
+        // P4WNP1_PAGE=status|cable|payloads|loadouts|jobs|system: open
+        // straight to a page. Used with P4WNP1_SHOT to capture each screen
+        // without driving the keypad.
         if (const char* page = std::getenv("P4WNP1_PAGE")) {
             const std::string want(page);
             if (want == "cable") {
@@ -407,10 +514,40 @@ int Application::run() {
             else if (want == "payloads") {
                 view_model.show_payloads_page();
             }
+            else if (want == "loadouts") {
+                view_model.show_loadouts_page();
+            }
+            else if (want == "jobs") {
+                view_model.show_jobs_page();
+            }
+            else if (want == "system") {
+                view_model.show_system_page();
+            }
             else {
                 view_model.show_status_page();
             }
             LOG_INFO("opening page: {}", page);
+        }
+
+        // P4WNP1_ACTION picks WHICH question an armed confirm band is asking,
+        // since several actions share one band. Screenshot tooling only.
+        if (const char* action = std::getenv("P4WNP1_ACTION")) {
+            const std::string want(action);
+            if (want == "deploy") {
+                screen::set_pending_loadout_action(screen::LoadoutAction::Deploy);
+            }
+            else if (want == "startup") {
+                screen::set_pending_loadout_action(screen::LoadoutAction::SetStartup);
+            }
+            else if (want == "delete") {
+                screen::set_pending_loadout_action(screen::LoadoutAction::Delete);
+            }
+            else if (want == "reboot") {
+                screen::set_pending_system_action(screen::SystemAction::Reboot);
+            }
+            else if (want == "shutdown") {
+                screen::set_pending_system_action(screen::SystemAction::Shutdown);
+            }
         }
 
         // P4WNP1_DEPLOY_STATE: open on a given Cable state. Screenshot
@@ -460,6 +597,53 @@ int Application::run() {
     LOG_INFO("LVGL app started at {}x{}", lv_display_get_horizontal_resolution(display),
              lv_display_get_vertical_resolution(display));
 
+    // P4WNP1_KEYS=down,down,enter,y : replay keystrokes through the real
+    // handler once the first screen has settled, then carry on to the shot.
+    // This is the only way the key wiring gets exercised off-device.
+    std::vector<uint32_t> replay_keys;
+    if (const char* keys = std::getenv("P4WNP1_KEYS")) {
+        const std::string spec(keys);
+        std::size_t at = 0;
+        while (at <= spec.size()) {
+            std::size_t comma = spec.find(',', at);
+            if (comma == std::string::npos) {
+                comma = spec.size();
+            }
+            std::string name = spec.substr(at, comma - at);
+            // trim
+            while (!name.empty() && (name.front() == ' ' || name.front() == '\t')) {
+                name.erase(name.begin());
+            }
+            while (!name.empty() && (name.back() == ' ' || name.back() == '\t')) {
+                name.pop_back();
+            }
+            if (!name.empty()) {
+                uint32_t code = 0;
+                if (name == "up")          code = LV_KEY_UP;
+                else if (name == "down")   code = LV_KEY_DOWN;
+                else if (name == "left")   code = LV_KEY_LEFT;
+                else if (name == "right")  code = LV_KEY_RIGHT;
+                else if (name == "enter")  code = LV_KEY_ENTER;
+                else if (name == "esc")    code = LV_KEY_ESC;
+                else if (name == "space")  code = ' ';
+                else if (name.size() == 1) code = static_cast<uint32_t>(name[0]);
+                if (code != 0) {
+                    replay_keys.push_back(code);
+                }
+                else {
+                    LOG_WARN("P4WNP1_KEYS: ignoring unknown key '{}'", name);
+                }
+            }
+            if (comma == spec.size()) {
+                break;
+            }
+            at = comma + 1;
+        }
+        LOG_INFO("key replay: {} keys queued", replay_keys.size());
+    }
+    std::size_t replayed = 0;
+    int replay_at_ms = 450;  // after the first screen has fetched and drawn
+
     // P4WNP1_SHOT=<ms>: let the UI settle, capture one frame, exit. This is how
     // the store screenshots in app-builder.json get made, and how a screen can
     // be reviewed by someone who does not have the device in front of them.
@@ -481,9 +665,19 @@ int Application::run() {
         lv_timer_handler();
         lv_delay_ms(5);
 
+        elapsed_ms += 5;
+
+        if (replayed < replay_keys.size() && elapsed_ms >= replay_at_ms) {
+            const uint32_t key = replay_keys[replayed++];
+            shortcuts.inject_key(key);
+            lv_refr_now(nullptr);
+            // Space the keys out so each one's render, and any RPC it makes,
+            // completes before the next arrives.
+            replay_at_ms = elapsed_ms + 160;
+        }
+
         if (shot_after_ms > 0) {
-            elapsed_ms += 5;
-            if (elapsed_ms >= shot_after_ms) {
+            if (elapsed_ms >= shot_after_ms && replayed >= replay_keys.size()) {
                 const auto result = platform::screenshot::capture_active_screen();
                 if (result.success) {
                     LOG_INFO("screenshot saved: {}", result.path);

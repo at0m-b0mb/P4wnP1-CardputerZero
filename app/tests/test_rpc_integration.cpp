@@ -81,7 +81,7 @@ int main(int argc, char** argv) {
 
         check(s.wifi_ok && s.wifi == "AP P4wnP1", "wifi state is read");
         check(s.reflexes_ok && s.reflexes == 3 && s.reflexes_armed == 2, "three reflexes, two armed");
-        check(s.jobs_ok && s.jobs_running == 1, "one job running");
+        check(s.jobs_ok && s.jobs_running == 2, "two jobs running");
     }
 
     std::printf("\n  an unknown method\n");
@@ -163,6 +163,108 @@ int main(int argc, char** argv) {
     {
         service::RpcClient client(base, good);
         check(client.cancel_all_jobs(), "running jobs can be cancelled");
+    }
+
+    std::printf("\n  loadouts\n");
+    {
+        service::RpcClient client(base, good);
+        const service::Listing l = client.list_loadouts();
+        check(l.ok, "the loadout shelf answers");
+        check(l.items.size() == 3, "...with three stored loadouts");
+        check(!l.items.empty() && l.items[0] == "office-rig", "...named as the service names them");
+    }
+    {
+        service::RpcClient client(base, good);
+        const service::Listing s0 = client.startup_loadout();
+        check(s0.ok && s0.items.size() == 1 && s0.items[0] == "airgap",
+              "the startup loadout is read");
+    }
+    {
+        service::RpcClient client(base, good);
+        const service::ActionOutcome out = client.deploy_loadout("office-rig");
+        check(out.ok, "a loadout deploys");
+
+        // Prove the NAME travelled, not just that a 200 came back. A deploy
+        // that silently applied the wrong bundle would otherwise pass.
+        const std::string cmd = "curl -s '" + base + "/__acted' -o /tmp/.acted.json";
+        check(std::system(cmd.c_str()) == 0, "...and the service recorded the call");
+        std::FILE* f = std::fopen("/tmp/.acted.json", "rb");
+        std::string body;
+        if (f) {
+            char buf[4096];
+            const std::size_t n = std::fread(buf, 1, sizeof(buf), f);
+            body.assign(buf, n);
+            std::fclose(f);
+        }
+        check(body.find("DeployStoredMasterTemplate") != std::string::npos,
+              "...by the right method");
+        check(body.find("office-rig") != std::string::npos,
+              "...carrying the name that was selected");
+    }
+    {
+        service::RpcClient client(base, good);
+        check(client.set_startup_loadout("demo-bench").ok, "the startup loadout can be set");
+        check(client.delete_loadout("demo-bench").ok, "a loadout can be deleted");
+    }
+    {
+        // An empty selection must never reach the wire: {"msg":""} would ask
+        // the service to deploy a loadout with no name.
+        service::RpcClient client(base, good);
+        const service::ActionOutcome out = client.deploy_loadout("");
+        check(!out.ok, "deploying nothing is refused locally");
+        check(out.error == "nothing selected", "...and said plainly");
+    }
+    {
+        service::RpcClient client(base, good);
+        const std::string cmd = "curl -s -o /dev/null '" + base +
+                                "/__refuse_method/DeployStoredMasterTemplate/no%20such%20template'";
+        check(std::system(cmd.c_str()) == 0, "a refusal can be armed");
+        const service::ActionOutcome out = client.deploy_loadout("ghost");
+        check(!out.ok, "a refused loadout is reported as failed");
+        check(out.error == "no such template", "...in the service's own words, not ours");
+    }
+
+    std::printf("\n  jobs\n");
+    {
+        service::RpcClient client(base, good);
+        const service::JobIds j = client.running_job_ids();
+        check(j.ok, "the running-job list answers");
+        check(j.ids.size() == 2, "...with both running jobs");
+        check(!j.ids.empty() && j.ids[0] == 7, "...by id");
+    }
+    {
+        service::RpcClient client(base, good);
+        check(client.job_label(7) == "quiet recon of the host",
+              "a job is labelled from its source comment");
+        // Job 9's source has no comment header, so the label falls back to
+        // its first line of code rather than to a name we made up.
+        check(client.job_label(9) == "layout('us');",
+              "a job with no comment labels by its first line");
+        check(client.job_label(999).empty(),
+              "an unknown job has no label at all");
+    }
+
+    std::printf("\n  the device itself\n");
+    {
+        service::RpcClient client(base, good);
+        check(client.set_led_blink(3).ok, "the LED can be blinked");
+    }
+    {
+        service::RpcClient client(base, good);
+        const std::string cmd = "curl -s -o /dev/null '" + base +
+                                "/__refuse_method/Reboot/not%20now';";
+        check(std::system(cmd.c_str()) == 0, "a refusal can be armed");
+        const service::ActionOutcome out = client.reboot();
+        check(!out.ok && out.error == "not now", "a refused reboot says why");
+    }
+    {
+        // Nothing answering at all must read differently from a refusal.
+        service::RpcClient dead("http://127.0.0.1:1", good);
+        dead.set_timeout_ms(800);
+        const service::ActionOutcome out = dead.reboot();
+        check(!out.ok, "a reboot with no service fails");
+        check(out.error.rfind("no service", 0) == 0,
+              "...and says NO SERVICE, not that the device refused");
     }
 
     std::printf("\n%s\n", failures == 0 ? "ALL RPC CHECKS PASS" : "RPC FAILURES PRESENT");

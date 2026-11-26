@@ -9,6 +9,9 @@
 #include "status_screen.h"
 #include "cable_screen.h"
 #include "payloads_screen.h"
+#include "loadouts_screen.h"
+#include "jobs_screen.h"
+#include "system_screen.h"
 
 namespace app {
 namespace {
@@ -72,6 +75,24 @@ void ScreenManager::show_payloads_screen() {
     has_loaded_page_ = true;
 }
 
+void ScreenManager::show_loadouts_screen() {
+    load_screen(std::make_unique<screen::LoadoutsScreen>(view_model_, assets_));
+    loaded_page_ = model::AppPage::Loadouts;
+    has_loaded_page_ = true;
+}
+
+void ScreenManager::show_jobs_screen() {
+    load_screen(std::make_unique<screen::JobsScreen>(view_model_, assets_));
+    loaded_page_ = model::AppPage::Jobs;
+    has_loaded_page_ = true;
+}
+
+void ScreenManager::show_system_screen() {
+    load_screen(std::make_unique<screen::SystemScreen>(view_model_, assets_));
+    loaded_page_ = model::AppPage::System;
+    has_loaded_page_ = true;
+}
+
 void ScreenManager::request_page(model::AppPage page) {
     requested_page_ = page;
 
@@ -89,16 +110,15 @@ void ScreenManager::flush_requested_page() {
         return;
     }
 
-    if (requested_page_ == model::AppPage::Payloads) {
-        show_payloads_screen();
-        return;
+    switch (requested_page_) {
+        case model::AppPage::Cable:    show_cable_screen();    return;
+        case model::AppPage::Payloads: show_payloads_screen(); return;
+        case model::AppPage::Loadouts: show_loadouts_screen(); return;
+        case model::AppPage::Jobs:     show_jobs_screen();     return;
+        case model::AppPage::System:   show_system_screen();   return;
+        case model::AppPage::Status:
+        default:                       show_status_screen();   return;
     }
-    if (requested_page_ == model::AppPage::Cable) {
-        show_cable_screen();
-        return;
-    }
-
-    show_status_screen();
 }
 
 lv_obj_t* ScreenManager::current_screen() const {

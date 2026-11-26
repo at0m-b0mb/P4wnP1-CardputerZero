@@ -15,6 +15,7 @@
 
 #pragma once
 
+#include "catalog.h"
 #include "status_parse.h"
 
 #include <string>
@@ -33,6 +34,14 @@ struct RunOutcome {
     int job_id = 0;
     std::string error;
     std::string sent_path;  // the absolute path we actually asked for
+};
+
+// An action either happened or it did not, and when it did not the operator
+// is told in the service's own words rather than ours. We do not know the
+// device's reasons better than it does.
+struct ActionOutcome {
+    bool ok = false;
+    std::string error;
 };
 
 struct RpcResult {
@@ -95,11 +104,59 @@ public:
     // Stop everything that is running.
     bool cancel_all_jobs();
 
+    // --- loadouts: P4wnP1 calls them master templates --------------------
+    //
+    // One stored bundle of USB, network, Bluetooth and reflex settings.
+    // Deploying one changes several subsystems at once, which is exactly why
+    // the screen confirms before it does.
+    Listing list_loadouts();
+
+    // Which loadout the service applies at boot. ok with nothing in it means
+    // none is set, which is an ordinary state and not a fault.
+    Listing startup_loadout();
+
+    ActionOutcome deploy_loadout(const std::string& name);
+    ActionOutcome set_startup_loadout(const std::string& name);
+    ActionOutcome delete_loadout(const std::string& name);
+
+    // --- jobs -------------------------------------------------------------
+    //
+    // Ids only: the service has no RPC that reports what a job was started
+    // from. Cheap, so the Status poll can call it every few seconds.
+    JobIds running_job_ids();
+
+    // One label, costing one call, so the Jobs screen asks only for the rows
+    // it can actually show. Empty when there is nothing usable to show, and
+    // the screen then falls back to the id rather than inventing a name.
+    std::string job_label(int id);
+
+    // --- the device itself -------------------------------------------------
+    //
+    // Reboot and shutdown end the session that is running the panel. Both are
+    // confirmed on screen before they are called; neither is undoable.
+    ActionOutcome reboot();
+    ActionOutcome shutdown();
+
+    // Blink the device LED, which is how you find which board on the bench is
+    // this one. Harmless, so it is not confirmed.
+    ActionOutcome set_led_blink(int count);
+
     const std::string& base_url() const { return base_url_; }
     void set_timeout_ms(long ms) { timeout_ms_ = ms; }
 
 private:
     std::string bearer_token();
+
+    // The service's own wording for a refusal, falling back to `fallback`
+    // when the reply carried none. A transport failure is reported as such,
+    // because "no service" and "the service said no" call for different
+    // actions by the operator.
+    ActionOutcome outcome_of(const RpcResult& result, const char* fallback);
+
+    // POST a {"msg": name} action and report what happened.
+    ActionOutcome msg_action(const std::string& method,
+                             const std::string& name,
+                             const char* fallback);
 
     std::string base_url_;
     std::string token_path_;

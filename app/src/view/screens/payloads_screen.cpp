@@ -252,6 +252,11 @@ void PayloadsScreen::render() {
     lv_obj_set_style_text_color(text, tone, 0);
     lv_obj_set_width(text, kScreenWidth - (metric::kGutter * 2));
     lv_label_set_long_mode(text, LV_LABEL_LONG_DOT);
+    // An explicit single-line height is what makes LONG_DOT actually clip.
+    // Without it the label is content-sized, a long message wraps to a second
+    // line, and that line prints straight through the key hints below -- which
+    // is how "Apply airgap? ..." came out overlapping "Y yes  N cancel".
+    lv_obj_set_height(text, metric::kTextNote + 2);
     lv_obj_align(text, LV_ALIGN_TOP_LEFT, metric::kGutter, 5);
 
     if (state == 1) {
