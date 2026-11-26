@@ -129,6 +129,22 @@ if(CPACK_DEBIAN_PACKAGE_SHLIBDEPS)
 else()
     set(CPACK_DEBIAN_PACKAGE_DEPENDS "${APP_DEBIAN_DEPENDS}")
 endif()
+
+# The engine, as a Recommends rather than a Depends.
+#
+# This package is the FACE: it speaks HTTP RPC to a P4wnP1 service on :8000 and
+# contains no part of P4wnP1 itself. Until this line existed, installing it on
+# a clean device produced a panel talking to an engine that was not there, with
+# nothing in the package metadata to say so.
+#
+# Recommends, not Depends, because the panel is genuinely useful without the
+# engine on the same machine -- pointed at a P4wnP1 on another box it is a
+# remote console, and `p4wnp1_panel --restore-networking` must keep working
+# even after the engine has been removed. apt installs Recommends by default,
+# so `apt install p4wnp1-panel` gets the whole device anyway; someone who
+# wants just the face can still pass --no-install-recommends.
+set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "p4wnp1-aloa")
+
 set(CPACK_DEBIAN_PACKAGE_CONTROL_STRICT_PERMISSION TRUE)
 
 configure_file(

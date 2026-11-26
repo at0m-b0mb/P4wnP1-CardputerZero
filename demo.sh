@@ -8,6 +8,7 @@
 #   ./demo.sh              the six screens, light theme
 #   ./demo.sh --dark       dark theme
 #   ./demo.sh --redact     as you would capture it for publishing
+#   ./demo.sh --verbose    keep LVGL's own log, which is otherwise filtered
 set -uo pipefail
 cd "$(dirname "$0")/app" || exit 1
 export PKG_CONFIG_PATH="/opt/homebrew/lib/pkgconfig:/opt/homebrew/share/pkgconfig"
@@ -23,6 +24,7 @@ for a in "$@"; do
     --light)  DARK=no ;;
     --redact) REDACT=1 ;;
     --page=*) PAGE="${a#--page=}" ;;
+    --verbose) VERBOSE=1 ;;
     *) echo "unknown option: $a"; exit 2 ;;
   esac
 done
@@ -66,8 +68,15 @@ cat <<'KEYS'
     close the window to stop
 KEYS
 
-env P4WNP1_API="http://127.0.0.1:$PORT" \
-    P4WNP1_TOKEN="$TOKEN" \
-    P4WNP1_PAGE="$PAGE" \
-    P4WNP1_REDACT="$REDACT" \
-    "$APP"
+# LVGL logs an [Info] line per object it creates, and the Status screen
+# rebuilds its labels every five seconds -- so within a minute the keymap
+# above has scrolled away and the panel's own messages are lost in it.
+# Keep the app's lines and the warnings; drop the rest unless asked.
+if [ "${VERBOSE:-0}" = "1" ]; then
+  env P4WNP1_API="http://127.0.0.1:$PORT" P4WNP1_TOKEN="$TOKEN" \
+      P4WNP1_PAGE="$PAGE" P4WNP1_REDACT="$REDACT" "$APP"
+else
+  env P4WNP1_API="http://127.0.0.1:$PORT" P4WNP1_TOKEN="$TOKEN" \
+      P4WNP1_PAGE="$PAGE" P4WNP1_REDACT="$REDACT" "$APP" 2>&1 \
+    | grep --line-buffered -vE "^\[Info\]"
+fi
